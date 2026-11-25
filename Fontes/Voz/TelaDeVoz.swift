@@ -5,9 +5,9 @@ import SwiftUI
 // de enviar: o glifo é Cores.fundo, nunca branco fixo.
 private enum PaletaDaVoz {
     static let escutando = Cores.acento
-    static let pensando = Color.orange
+    static let pensando = Cores.acento
     static let falando = Cores.texto
-    static let ocioso = Color.secondary
+    static let ocioso = Cores.textoFraco
 }
 
 private enum EstadoDaVoz: Equatable {
@@ -149,17 +149,17 @@ struct TelaDeVoz: View {
             )
             .ignoresSafeArea()
 
-            VStack(spacing: 24) {
+            VStack(spacing: Espaco.xl) {
                 cabecalho
-                Spacer(minLength: 8)
+                Spacer(minLength: Espaco.s)
                 esfera
                 textos
                 transcricao
-                Spacer(minLength: 8)
+                Spacer(minLength: Espaco.s)
                 botaoDoMicrofone
             }
-            .padding(.horizontal, 24)
-            .padding(.vertical, 20)
+            .padding(.horizontal, Espaco.xl)
+            .padding(.vertical, Espaco.l)
         }
         .onAppear {
             voz.aoConcluirFrase = { texto in
@@ -186,7 +186,8 @@ struct TelaDeVoz: View {
     private var cabecalho: some View {
         HStack {
             Text("Voz")
-                .font(.headline)
+                .foregroundStyle(Cores.texto)
+                .font(Tipografia.titulo(17))
             Spacer()
             Button {
                 voz.calar()
@@ -194,9 +195,11 @@ struct TelaDeVoz: View {
                 fechar()
             } label: {
                 Image(systemName: "xmark")
-                    .font(.body.weight(.semibold))
+                    .font(Tipografia.titulo(17))
                     .frame(width: 40, height: 40)
-                    .background(Color.primary.opacity(0.08), in: Circle())
+                    .background(Cores.superficieElevada, in: Circle())
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Fechar a tela de voz")
@@ -228,19 +231,20 @@ struct TelaDeVoz: View {
     }
 
     private var textos: some View {
-        VStack(spacing: 8) {
-            HStack(spacing: 8) {
+        VStack(spacing: Espaco.s) {
+            HStack(spacing: Espaco.s) {
                 if estado == .pensando {
                     ProgressView()
                         .controlSize(.small)
                 }
                 Text(tituloDoEstado)
-                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(Cores.texto)
+                    .font(Tipografia.titulo())
                     .multilineTextAlignment(.center)
             }
             Text(detalheDoEstado)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .font(Tipografia.corpo())
+                .foregroundStyle(Cores.textoFraco)
                 .multilineTextAlignment(.center)
         }
     }
@@ -249,15 +253,20 @@ struct TelaDeVoz: View {
     private var transcricao: some View {
         if !voz.textoParcial.isEmpty {
             Text(voz.textoParcial)
-                .font(.body)
+                .foregroundStyle(Cores.texto)
+                .font(Tipografia.corpo())
                 .multilineTextAlignment(.center)
                 .lineLimit(3)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
+                .padding(.horizontal, Espaco.l)
+                .padding(.vertical, Espaco.m)
                 .frame(maxWidth: 420)
                 .background(
-                    Color.primary.opacity(0.06),
-                    in: RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    RoundedRectangle(cornerRadius: Raio.l, style: .continuous)
+                        .fill(Cores.superficie)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: Raio.l, style: .continuous)
+                                .strokeBorder(Cores.borda.opacity(0.55), lineWidth: 1)
+                        )
                 )
                 .accessibilityLabel("Transcrição: \(voz.textoParcial)")
         }

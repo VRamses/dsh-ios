@@ -57,12 +57,15 @@ targets:
         optional: true
       - path: Fontes/Plataforma
         optional: true
+      - path: Recursos/Assets.xcassets
+        optional: true
     settings:
       base:
         PRODUCT_NAME: DSH
         PRODUCT_BUNDLE_IDENTIFIER: dev.ramses.dsh
         INFOPLIST_FILE: Recursos/Info-App.plist
         CODE_SIGN_ENTITLEMENTS: Recursos/DSH.entitlements
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         TARGETED_DEVICE_FAMILY: "1"
     dependencies:
       - target: DSHWidget

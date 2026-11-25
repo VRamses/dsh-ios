@@ -119,4 +119,23 @@ Outros limites, sem rodeio:
 - `.github/workflows/ios.yml`: a compilação no Actions, com os jobs `simulador` e `ipa`.
 - `Fontes/`: o código, separado por assunto (App, Nucleo, Provedores, Compartilhado, Desenho,
   Conversa, Artefatos, Voz, Ferramentas, Plataforma, Widget, Extensao).
-- `Recursos/`: os três `Info.plist` e os três `.entitlements`.
+- `Recursos/`: os três `Info.plist`, os três `.entitlements` e o catálogo `Assets.xcassets`.
+
+## 8. O ícone do app
+
+O ícone é o sinal de prompt do terminal: um chevron e um cursor em âmbar (`0xE3A33C`, o mesmo
+token `Cores.acento` do tema escuro) sobre o fundo `0x0E1013`. Ele é gerado por script, não é
+arte de terceiro, para o app não carregar licença de imagem.
+
+- Arquivo: `Recursos/Assets.xcassets/AppIcon.appiconset/icone-1024.png`, 1024x1024, sem alfa.
+- Formato do catálogo: ícone único `universal` com `platform: ios`, que é como o Xcode 16
+  aceita o tamanho 1024 desde o iOS 18; o Xcode deriva os outros tamanhos.
+- Ligado ao alvo por `ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon` no `project.yml`. Sem essa
+  linha o catálogo compila, vira `Assets.car` no pacote e o ícone continua vazio na tela do
+  iPhone.
+- O script que desenha o PNG é `Recursos/icone/gerar-icone.ps1` e roda em Windows PowerShell
+  5.1 com `System.Drawing`, sem dependência externa. Ele é ASCII puro de propósito: o
+  PowerShell 5.1 lê arquivo com acento como ANSI, e aí o caminho do usuário chega corrompido e
+  a gravação falha com acesso negado. Para refazer:
+  `powershell -NoProfile -ExecutionPolicy Bypass -File Recursos\icone\gerar-icone.ps1`.
+

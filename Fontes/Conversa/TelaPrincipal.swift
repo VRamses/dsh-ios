@@ -49,7 +49,7 @@ struct TelaPrincipal: View {
             .toolbarBackground(Cores.fundo, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbar { barraDeNavegacao }
-            .safeAreaInset(edge: .bottom) { barraDeEntrada }
+            .safeAreaInset(edge: .bottom, spacing: 0) { barraDeEntrada }
             .environment(\.locale, Locale(identifier: "pt_BR"))
             .sheet(isPresented: $sessoesAbertas) {
                 TelaSessoesDsh(modelo: modelo, aoAbrir: abrirSessao)
@@ -201,20 +201,33 @@ struct TelaPrincipal: View {
         }
     }
 
+    /// Barra sólida, não translúcida. O transcrito rola por baixo dela, e com o
+    /// fundo só no cartão o texto do bloco de código aparecia como fantasma na
+    /// faixa do indicador de home. O fundo cobre a barra inteira, inclusive essa
+    /// faixa, e o fio de 1 ponto separa do conteúdo que rola.
     private var barraDeEntrada: some View {
-        BarraDeEntrada(
-            texto: $rascunho,
-            anexos: $anexos,
-            estaRespondendo: modelo.estaRespondendo,
-            modeloAtual: modeloEscolhido,
-            sessaoAtual: usandoPonte ? (tituloDaSessao ?? "sessão do DSH") : nil,
-            aoEnviar: enviar,
-            aoParar: { modelo.cancelar() },
-            aoEscolherModelo: escolherModelo,
-            aoEscolherSessao: abrirSessoes
-        )
-        .padding(.horizontal, Espaco.l)
-        .padding(.bottom, Espaco.s)
+        VStack(spacing: 0) {
+            Rectangle()
+                .fill(Cores.borda)
+                .frame(height: 1)
+                .accessibilityHidden(true)
+
+            BarraDeEntrada(
+                texto: $rascunho,
+                anexos: $anexos,
+                estaRespondendo: modelo.estaRespondendo,
+                modeloAtual: modeloEscolhido,
+                sessaoAtual: usandoPonte ? (tituloDaSessao ?? "sessão do DSH") : nil,
+                aoEnviar: enviar,
+                aoParar: { modelo.cancelar() },
+                aoEscolherModelo: escolherModelo,
+                aoEscolherSessao: abrirSessoes
+            )
+            .padding(.horizontal, Espaco.l)
+            .padding(.top, Espaco.s)
+            .padding(.bottom, Espaco.s)
+        }
+        .background(Cores.fundo, ignoresSafeAreaEdges: .bottom)
     }
 
     // MARK: - Gaveta
