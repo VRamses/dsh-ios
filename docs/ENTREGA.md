@@ -44,7 +44,9 @@ gh run watch --repo VRamses/dsh-ios
 gh run download --repo VRamses/dsh-ios --name ipa --dir "C:\Users\Ramsés\Downloads\dsh-ipa"
 ```
 
-O artefato `ipa` traz `DSH.ipa`; o artefato `simulador` traz as capturas de tela de cada rota
+O artefato `ipa` traz dois pacotes: `DSH-livre.ipa`, que é o que se instala com conta Apple
+gratuita, e `DSH.ipa`, o pacote completo com as duas extensões, que só assina em conta paga. O
+artefato `simulador` traz as capturas de tela de cada rota
 (`conversa`, `voz`, `ajustes`, `dsh`, `artefato`) e o log de compilação. Quando a compilação
 falha, o log com o erro do `xcodebuild` está no artefato `simulador`, em `build-compilacao.log`
 ou no próprio resumo do job.
@@ -59,6 +61,20 @@ O workflow compila com `CODE_SIGNING_ALLOWED=NO`, ou seja, gera o binário e emp
 `Payload/DSH.app` dentro de um `.ipa`, sem assinatura da Apple. Nesse estado o iPhone não
 instala o arquivo sozinho: ele precisa ser assinado com um certificado válido para o aparelho.
 Quem faz essa assinatura é o programa de instalação no PC, usando a sua conta Apple.
+
+O job `ipa` produz dois pacotes, e a escolha entre eles não é preferência:
+
+| pacote | conteúdo | serve para |
+|---|---|---|
+| `DSH-livre.ipa` | só o app principal, sem `PlugIns` | conta Apple gratuita, no Sideloadly ou no AltStore |
+| `DSH.ipa` | app principal mais `DSHWidget.appex` e `DSHCompartilhar.appex` | conta Apple paga, onde os três assinam |
+
+O pacote com extensão pede três perfis separados, um por bundle, e o App Group que só a conta
+paga libera; com conta gratuita o Sideloadly recusa o arquivo ou instala um app que fecha na
+abertura. Por isso o `DSH-livre.ipa` sai da `DSH.app` já compilada, com a pasta `PlugIns`
+removida antes de zipar. O código do app principal não depende do App Group para nada
+essencial: as leituras do armazém compartilhado checam `nil` e simplesmente não entregam o
+texto vindo da extensão de compartilhamento, que é o único recurso perdido nessa escolha.
 
 Três caminhos, do mais simples ao mais trabalhoso:
 
@@ -95,20 +111,56 @@ Outros limites, sem rodeio:
 
 ## 5. Primeira instalação, passo a passo
 
-1. Baixe o artefato `ipa` e deixe `DSH.ipa` numa pasta conhecida.
-2. Instale o Sideloadly no PC (ou o AltServer, se preferir renovação automática).
-3. Conecte o iPhone por cabo, confie no computador e no perfil de desenvolvedor.
-4. Arraste o `DSH.ipa` para o Sideloadly, informe a conta Apple e a senha, e mande instalar.
-5. No iPhone, em Ajustes, Perfil e Gerenciamento de Dispositivo, autorize o perfil do
-   desenvolvedor. Sem isso o app fecha na hora que abre.
-6. Abra o app, vá em Ajustes e cole: a chave da API da DeepSeek e, se for usar a ponte, o
+O que só você pode fazer, porque envolve o seu aparelho e a sua senha: plugar o cabo, tocar
+"Confiar" no iPhone, digitar a senha da conta Apple e o código de dois fatores, e autorizar o
+perfil de desenvolvedor no aparelho. Nenhum agente faz isso de fora, e a senha da conta Apple
+não deve ser entregue a ninguém.
+
+O que o PC precisa ter, no Windows:
+
+| programa | para quê | observação |
+|---|---|---|
+| iTunes fora da Microsoft Store, ou o app Apple Devices | driver do iPhone e bibliotecas que o AltServer usa | o que já está instalado nesta máquina é só o `Apple Mobile Device Support` que veio com o iCloud, e ele serve para o Sideloadly, não para o AltServer |
+| Sideloadly | assinar e instalar uma vez, pelo cabo | caminho mais curto para o primeiro app no aparelho |
+| AltServer mais AltStore | renovar a assinatura sozinho a cada 7 dias, pela rede local | exige o iTunes instalado e o AltServer aberto no PC |
+
+Caminho A, Sideloadly (recomendado para a primeira instalação):
+
+1. Baixe o artefato `ipa` da rodada verde e pegue `DSH-livre.ipa`.
+2. Instale o Sideloadly no PC e abra. Ele instala os drivers que faltarem.
+3. Ligue o iPhone por cabo, toque em "Confiar" no aparelho e informe a senha do aparelho.
+4. No iPhone, abra Ajustes, Privacidade e Segurança, Modo de Desenvolvedor e ligue. O iOS 16
+   ou mais novo exige isso para abrir app assinado fora da App Store, e o aparelho reinicia.
+5. Arraste `DSH-livre.ipa` para a janela do Sideloadly, preencha a conta Apple, e mande
+   instalar. Se a conta tiver dois fatores, o programa pede o código na hora.
+6. No iPhone, em Ajustes, Geral, VPN e Gerenciamento de Dispositivo, toque no perfil com o seu
+   Apple ID e escolha "Confiar". Sem esse passo o app fecha no instante em que abre.
+7. Abra o app DSH, vá em Ajustes e cole: a chave da API da DeepSeek e, se for usar a ponte, o
    endereço do tailnet mais o token da ponte.
+
+Caminho B, AltStore (para quem quer renovação automática):
+
+1. Instale o iTunes pelo site da Apple (o da Microsoft Store não serve) e o AltServer no PC.
+2. Ligue o iPhone por cabo, confie no computador, e rode o AltServer com o aparelho conectado.
+3. No AltServer, escolha "Install AltStore" e informe a conta Apple. Ele instala o AltStore no
+   aparelho e usa a mesma conta para assinar os apps que você instalar por ele.
+4. Autorize o perfil de desenvolvedor como no passo 6 do caminho A, e ligue o Modo de
+   Desenvolvedor como no passo 4.
+5. No iPhone, abra o AltStore, aba My Apps, toque em "+" e escolha `DSH-livre.ipa` que você
+   mandou para o aparelho (AirDrop, Arquivos ou iCloud Drive).
+6. Deixe o AltServer aberto no PC e o iPhone na mesma rede de vez em quando: ele renova a
+   assinatura antes dos 7 dias vencerem.
+
+O que o pacote livre perde em relação ao completo: o widget mostrar a última conversa e o
+compartilhamento de texto de outro app para o DSH. O ícone do widget continua abrindo as rotas
+do app, porque isso é link, não dado compartilhado.
 
 ## 6. O que conferir quando algo não abre
 
 | sintoma | causa provável | o que fazer |
 |---|---|---|
 | app fecha ao abrir | perfil de desenvolvedor não autorizado, ou assinatura vencida | autorizar o perfil nos Ajustes, ou reassinar |
+| Sideloadly recusa o arquivo ou o app fecha na abertura com conta gratuita | foi instalado o `DSH.ipa` completo, que tem extensão e App Group | instalar o `DSH-livre.ipa`, que sai na mesma rodada |
 | erro de rede no motor da ponte | Tailscale fora, notebook desligado, endereço sem `https://` | conferir o tailnet e o endereço salvo nos Ajustes |
 | motor direto responde 401 | chave da API errada ou revogada | colar a chave de novo em Ajustes |
 | widget abre mas não mostra conversa | App Group indisponível na conta gratuita | comportamento esperado, ver item 4 |

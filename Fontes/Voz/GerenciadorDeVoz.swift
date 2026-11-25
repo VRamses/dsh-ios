@@ -91,6 +91,12 @@ final class GerenciadorDeVoz: ObservableObject {
         }
     }
 
+    /// A tela consulta isto antes de ligar o microfone sozinha: o pedido de
+    /// autorização do sistema fica reservado ao toque do usuário no botão.
+    var permissaoDeFalaConcedida: Bool {
+        SFSpeechRecognizer.authorizationStatus() == .authorized
+    }
+
     func parar() {
         pausaAgendada?.cancel()
         pausaAgendada = nil

@@ -312,7 +312,7 @@ struct TelaDeAjustes: View {
             .accessibilityLabel("Abrir a voz automaticamente")
             .accessibilityHint("Guarda a preferência de entrar no modo de voz ao abrir uma conversa nova.")
 
-            textoDeApoio("Nesta versão a tela de voz ainda não lê esta preferência: o valor fica salvo aqui para quando ela ler. O microfone e a transcrição já funcionam pela tela de voz.")
+            textoDeApoio("Ligado, a tela de voz começa a ouvir assim que abre, desde que a permissão de fala já esteja concedida. Desligado, o microfone só liga no toque. O padrão é desligado, para o microfone nunca abrir sem você pedir.")
         } header: {
             cabecalho("Voz")
         }

@@ -193,18 +193,34 @@ jobs:
             SYMROOT="$PWD/build" \
             build
 
+      # Dois pacotes, porque as contas Apple nao assinam a mesma coisa: o IPA
+      # completo tem as duas extensoes dentro de PlugIns, e cada extensao pede
+      # perfil e App ID proprios, alem do App Group que so a conta paga libera.
+      # Com conta gratuita, o Sideloadly e o AltStore falham ao assinar o pacote
+      # com extensao, entao o DSH-livre.ipa sai sem PlugIns: um bundle, um App
+      # ID, e a conversa, a voz e os artefatos seguem funcionando porque nada
+      # dentro do app principal depende do App Group para responder.
       - name: Empacotar IPA
         run: |
           set -euo pipefail
-          rm -rf build/Payload
-          mkdir -p build/Payload
+          rm -rf build/Payload build/PayloadLivre
+          mkdir -p build/Payload build/PayloadLivre
           cp -R build/Release-iphoneos/DSH.app build/Payload/DSH.app
           ditto -c -k --keepParent build/Payload build/DSH.ipa
-          ls -lh build/DSH.ipa
+          cp -R build/Release-iphoneos/DSH.app build/PayloadLivre/DSH.app
+          rm -rf build/PayloadLivre/DSH.app/PlugIns
+          ditto -c -k --keepParent build/PayloadLivre build/DSH-livre.ipa
+          ls -lh build/DSH.ipa build/DSH-livre.ipa
+          echo "extensoes no pacote completo:"
+          ls build/Payload/DSH.app/PlugIns || true
+          echo "extensoes no pacote livre (tem de ser vazio):"
+          ls build/PayloadLivre/DSH.app/PlugIns || true
 
       - name: Guardar IPA
         uses: actions/upload-artifact@v4
         with:
           name: ipa
-          path: build/DSH.ipa
+          path: |
+            build/DSH.ipa
+            build/DSH-livre.ipa
           if-no-files-found: error

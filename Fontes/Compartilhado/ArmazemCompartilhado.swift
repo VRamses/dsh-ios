@@ -6,6 +6,11 @@ enum ArmazemCompartilhado {
     private static let chaveRota = "dsh.rotaPendente"
     private static let chaveTexto = "dsh.textoPendente"
 
+    /// Devolve nil quando o App Group não está no perfil de assinatura, e isso é
+    /// esperado: conta Apple gratuita não libera App Group, então o app assinado
+    /// com ela abre sem o armazém compartilhado. Todas as leituras e escritas
+    /// abaixo checam nil antes de usar, porque a alternativa seria o app morrer
+    /// na abertura no único cenário em que ele é instalável de graça.
     private static var padroes: UserDefaults? {
         UserDefaults(suiteName: identificadorDoGrupo)
     }

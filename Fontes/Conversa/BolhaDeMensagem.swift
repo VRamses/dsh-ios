@@ -58,8 +58,17 @@ struct BolhaDeMensagem: View {
         HStack(alignment: .top, spacing: 0) {
             Spacer(minLength: Espaco.xxl)
             VStack(alignment: .leading, spacing: Espaco.s) {
+                // O anexo enviado usa o mesmo cartão da barra de entrada, com nome,
+                // tipo, tamanho e começo do texto já extraído; `aoRemover` fica sem
+                // valor de propósito, porque anexo que já foi enviado não sai do
+                // transcrito. O vão entre cartões é maior que o dos antigos rótulos
+                // porque cada um é um painel alto, não uma linha de texto.
                 if !anexos.isEmpty {
-                    rotulosDosAnexos
+                    VStack(alignment: .leading, spacing: Espaco.s) {
+                        ForEach(anexos) { anexo in
+                            CartaoDeAnexo(anexo: anexo)
+                        }
+                    }
                 }
                 if !texto.isEmpty {
                     TextoRico(texto)
@@ -99,8 +108,15 @@ struct BolhaDeMensagem: View {
                     trabalhoEmCurso
                 }
             }
+            // Anexos que o modelo devolveu ficam no fim da resposta, no mesmo
+            // cartão e no mesmo vão da fala do usuário, para o anexo ser reconhecido
+            // do mesmo jeito nos dois lados da conversa.
             if !anexos.isEmpty {
-                rotulosDosAnexos
+                VStack(alignment: .leading, spacing: Espaco.s) {
+                    ForEach(anexos) { anexo in
+                        CartaoDeAnexo(anexo: anexo)
+                    }
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -140,38 +156,6 @@ struct BolhaDeMensagem: View {
             .multilineTextAlignment(.center)
             .frame(maxWidth: .infinity)
             .padding(.vertical, Espaco.s)
-    }
-
-    // MARK: - Anexos
-
-    private var rotulosDosAnexos: some View {
-        VStack(alignment: .leading, spacing: Espaco.xs) {
-            ForEach(anexos) { anexo in
-                HStack(spacing: Espaco.xs) {
-                    Image(systemName: icone(de: anexo.tipo))
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(Cores.textoFraco)
-                        .frame(width: 16)
-                    Text(anexo.nome)
-                        .font(Tipografia.legenda())
-                        .foregroundStyle(Cores.textoFraco)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel("Anexo \(anexo.nome)")
-            }
-        }
-    }
-
-    private func icone(de tipo: Anexo.Tipo) -> String {
-        switch tipo {
-        case .imagem: return "photo"
-        case .pdf: return "doc.richtext"
-        case .texto: return "doc.text"
-        case .codigo: return "chevron.left.forwardslash.chevron.right"
-        default: return "doc"
-        }
     }
 }
 

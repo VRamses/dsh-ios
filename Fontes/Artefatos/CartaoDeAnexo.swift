@@ -1,7 +1,8 @@
 import SwiftUI
 
-/// Cartão compacto do anexo na barra de entrada: identifica o arquivo, mostra o começo
-/// do texto já extraído e deixa remover antes de enviar.
+/// Cartão do anexo: identifica o arquivo, mostra tipo, tamanho e o começo do texto
+/// já extraído. No transcrito ele entra sem `aoRemover`, porque anexo já enviado não
+/// sai da conversa; a ação de remover existe no cartão para quem ainda vai enviar.
 struct CartaoDeAnexo: View {
     var anexo: Anexo
     var aoRemover: (() -> Void)? = nil

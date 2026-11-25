@@ -117,11 +117,18 @@ struct TelaDeVoz: View {
     var enviar: (String) -> Void
     var fechar: () -> Void
 
+    /// A preferência é a única entrada da decisão de escutar sozinha: ela mora no
+    /// objeto compartilhado para não existir uma segunda cópia que possa divergir.
+    @ObservedObject private var preferencias = Preferencias.compartilhada
+
     /// A primavera só existe como animação de view; a esfera usa para crescer
     /// ao som da voz sem que os anéis internos voltem ao tamanho antigo de repente.
     @State private var nivelDaPrimavera: CGFloat = 0
     @State private var mostrarErro = false
     @State private var mensagemDeErro = ""
+    /// Uma vez por aparição: onAppear pode repetir sem a tela sair, e nesse caso
+    /// a escuta não deve ser religada por cima de uma parada manual do usuário.
+    @State private var iniciouSozinha = false
 
     private var estado: EstadoDaVoz {
         if voz.falando {
@@ -165,11 +172,12 @@ struct TelaDeVoz: View {
             voz.aoConcluirFrase = { texto in
                 enviar(texto)
             }
-            tentarIniciar()
+            iniciarSozinhaSePuder()
         }
         .onDisappear {
             voz.aoConcluirFrase = nil
             voz.parar()
+            iniciouSozinha = false
         }
         .onChange(of: voz.nivelDeAudio) { _, novo in
             withAnimation(.spring(response: 0.32, dampingFraction: 0.62)) {
@@ -373,6 +381,20 @@ struct TelaDeVoz: View {
             mensagemDeErro = error.localizedDescription
             mostrarErro = true
         }
+    }
+
+    /// A preferência é a única entrada da decisão. O guarda de permissão existe
+    /// porque iniciar() pede a autorização do sistema quando ela ainda não foi
+    /// decidida, e a tela não deve abrir pedido de permissão sozinha: sem a
+    /// permissão já concedida, fica o estado ocioso e o botão manual de sempre.
+    private func iniciarSozinhaSePuder() {
+        guard preferencias.vozAutomatica else { return }
+        guard !iniciouSozinha else { return }
+        guard !voz.transcrevendo else { return }
+        guard voz.permissaoDeFalaConcedida else { return }
+        // Marca antes de tentar: se o motor falhar, o alerta não volta a cada onAppear.
+        iniciouSozinha = true
+        tentarIniciar()
     }
 }
 
