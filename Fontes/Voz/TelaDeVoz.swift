@@ -1,0 +1,371 @@
+import SwiftUI
+
+// Fontes/Desenho/ ainda não existe. Enquanto swift-chat não publicar os tokens,
+// estas cores e medidas ficam aqui: é o ponto de troca por Cores, Espaco, Raio e Tipografia.
+private enum PaletaDaVoz {
+    static let escutando = Color.accentColor
+    static let pensando = Color.orange
+    static let falando = Color.green
+    static let ocioso = Color.secondary
+}
+
+private enum EstadoDaVoz: Equatable {
+    case escutando
+    case pensando
+    case falando
+    case ocioso
+}
+
+private func corPara(_ estado: EstadoDaVoz) -> Color {
+    switch estado {
+    case .escutando:
+        return PaletaDaVoz.escutando
+    case .pensando:
+        return PaletaDaVoz.pensando
+    case .falando:
+        return PaletaDaVoz.falando
+    case .ocioso:
+        return PaletaDaVoz.ocioso
+    }
+}
+
+// O nível do microfone já chega suavizado; aqui só se acrescenta o respiro dos
+// estados que não têm áudio para reagir (pensando, falando, parado).
+private func nivelDeDesenho(base: CGFloat, estado: EstadoDaVoz, pulso: CGFloat) -> CGFloat {
+    switch estado {
+    case .escutando:
+        return min(max(base, 0), 1)
+    case .falando:
+        return 0.35 + 0.18 * pulso
+    case .pensando:
+        return 0.22 + 0.12 * pulso
+    case .ocioso:
+        return 0.06 + 0.04 * pulso
+    }
+}
+
+private struct EsferaDaVoz: View {
+    var nivel: CGFloat
+    var pulso: CGFloat
+    var cor: Color
+    var estado: EstadoDaVoz
+    var instante: Date
+
+    var body: some View {
+        Canvas { contexto, tamanho in
+            let centro = CGPoint(x: tamanho.width / 2, y: tamanho.height / 2)
+            let menor = min(tamanho.width, tamanho.height)
+
+            for camada in 0..<4 {
+                let indice = CGFloat(camada)
+                let fracao = 0.18 + indice * 0.07
+                let raio = menor * fracao * (1 + nivel * 0.28)
+                    + menor * 0.015 * pulso * (1 - indice * 0.15)
+                let caixa = CGRect(
+                    x: centro.x - raio,
+                    y: centro.y - raio,
+                    width: raio * 2,
+                    height: raio * 2
+                )
+                let opacidade = max(0.10, 0.62 - Double(indice) * 0.13 + Double(nivel) * 0.12)
+                contexto.stroke(
+                    Path(ellipseIn: caixa),
+                    with: .color(cor.opacity(opacidade)),
+                    lineWidth: 2.2 - indice * 0.35
+                )
+            }
+
+            let raioNucleo = menor * (0.075 + nivel * 0.05)
+            let nucleo = CGRect(
+                x: centro.x - raioNucleo,
+                y: centro.y - raioNucleo,
+                width: raioNucleo * 2,
+                height: raioNucleo * 2
+            )
+            contexto.fill(
+                Path(ellipseIn: nucleo),
+                with: .radialGradient(
+                    Gradient(colors: [cor.opacity(0.95), cor.opacity(0.10)]),
+                    center: centro,
+                    startRadius: 0,
+                    endRadius: raioNucleo
+                )
+            )
+
+            // Ponto em órbita: o estado pensando precisa de movimento próprio,
+            // porque não há áudio nenhum entrando nem saindo nesse momento.
+            if estado == .pensando {
+                let angulo = instante.timeIntervalSinceReferenceDate * 1.8
+                let raioDaOrbita = menor * 0.44
+                let ponto = CGPoint(
+                    x: centro.x + CGFloat(cos(angulo)) * raioDaOrbita,
+                    y: centro.y + CGFloat(sin(angulo)) * raioDaOrbita
+                )
+                contexto.fill(
+                    Path(ellipseIn: CGRect(x: ponto.x - 6, y: ponto.y - 6, width: 12, height: 12)),
+                    with: .color(cor.opacity(0.85))
+                )
+            }
+        }
+    }
+}
+
+struct TelaDeVoz: View {
+    @ObservedObject var voz: GerenciadorDeVoz
+    var pensando: Bool = false
+    var enviar: (String) -> Void
+    var fechar: () -> Void
+
+    /// A primavera só existe como animação de view; a esfera usa para crescer
+    /// ao som da voz sem que os anéis internos voltem ao tamanho antigo de repente.
+    @State private var nivelDaPrimavera: CGFloat = 0
+    @State private var mostrarErro = false
+    @State private var mensagemDeErro = ""
+
+    private var estado: EstadoDaVoz {
+        if voz.falando {
+            return .falando
+        }
+        if pensando {
+            return .pensando
+        }
+        if voz.transcrevendo {
+            return .escutando
+        }
+        return .ocioso
+    }
+
+    private var corDoEstado: Color {
+        corPara(estado)
+    }
+
+    var body: some View {
+        ZStack {
+            LinearGradient(
+                colors: [corDoEstado.opacity(0.16), .clear],
+                startPoint: .top,
+                endPoint: .center
+            )
+            .ignoresSafeArea()
+
+            VStack(spacing: 24) {
+                cabecalho
+                Spacer(minLength: 8)
+                esfera
+                textos
+                transcricao
+                Spacer(minLength: 8)
+                botaoDoMicrofone
+            }
+            .padding(.horizontal, 24)
+            .padding(.vertical, 20)
+        }
+        .onAppear {
+            voz.aoConcluirFrase = { texto in
+                enviar(texto)
+            }
+            tentarIniciar()
+        }
+        .onDisappear {
+            voz.aoConcluirFrase = nil
+            voz.parar()
+        }
+        .onChange(of: voz.nivelDeAudio) { _, novo in
+            withAnimation(.spring(response: 0.32, dampingFraction: 0.62)) {
+                nivelDaPrimavera = novo
+            }
+        }
+        .alert("Não consegui abrir o microfone", isPresented: $mostrarErro) {
+            Button("Ok", role: .cancel) {}
+        } message: {
+            Text(mensagemDeErro)
+        }
+    }
+
+    private var cabecalho: some View {
+        HStack {
+            Text("Voz")
+                .font(.headline)
+            Spacer()
+            Button {
+                voz.calar()
+                voz.parar()
+                fechar()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.body.weight(.semibold))
+                    .frame(width: 40, height: 40)
+                    .background(Color.primary.opacity(0.08), in: Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Fechar a tela de voz")
+        }
+    }
+
+    private var esfera: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { contexto in
+            let pulso = CGFloat(
+                0.5 + 0.5 * sin(contexto.date.timeIntervalSinceReferenceDate * 2.2)
+            )
+            let nivel = nivelDeDesenho(
+                base: voz.nivelDeAudio,
+                estado: estado,
+                pulso: pulso
+            )
+            EsferaDaVoz(
+                nivel: nivel,
+                pulso: pulso,
+                cor: corDoEstado,
+                estado: estado,
+                instante: contexto.date
+            )
+            .aspectRatio(1, contentMode: .fit)
+            .frame(maxWidth: 300, maxHeight: 300)
+            .scaleEffect(1 + nivelDaPrimavera * 0.08)
+            .accessibilityHidden(true)
+        }
+    }
+
+    private var textos: some View {
+        VStack(spacing: 8) {
+            HStack(spacing: 8) {
+                if estado == .pensando {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+                Text(tituloDoEstado)
+                    .font(.title2.weight(.semibold))
+                    .multilineTextAlignment(.center)
+            }
+            Text(detalheDoEstado)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+    }
+
+    @ViewBuilder
+    private var transcricao: some View {
+        if !voz.textoParcial.isEmpty {
+            Text(voz.textoParcial)
+                .font(.body)
+                .multilineTextAlignment(.center)
+                .lineLimit(3)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .frame(maxWidth: 420)
+                .background(
+                    Color.primary.opacity(0.06),
+                    in: RoundedRectangle(cornerRadius: 18, style: .continuous)
+                )
+                .accessibilityLabel("Transcrição: \(voz.textoParcial)")
+        }
+    }
+
+    private var botaoDoMicrofone: some View {
+        Button(action: acaoDoMicrofone) {
+            Image(systemName: iconeDoMicrofone)
+                .font(.system(size: 30, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 76, height: 76)
+                .background(corDoBotao, in: Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(rotuloDoMicrofone)
+        .accessibilityHint(dicaDoMicrofone)
+    }
+
+    private var tituloDoEstado: String {
+        switch estado {
+        case .escutando:
+            return "Escutando"
+        case .pensando:
+            return "Pensando"
+        case .falando:
+            return "Falando"
+        case .ocioso:
+            return "Microfone desligado"
+        }
+    }
+
+    private var detalheDoEstado: String {
+        switch estado {
+        case .escutando:
+            return "Fale normalmente. Envio quando você fizer uma pausa."
+        case .pensando:
+            return "Já enviei o que você disse e estou esperando a resposta."
+        case .falando:
+            return "Toque no microfone para me interromper."
+        case .ocioso:
+            return "Toque no microfone para começar."
+        }
+    }
+
+    private var iconeDoMicrofone: String {
+        switch estado {
+        case .falando:
+            return "speaker.slash.fill"
+        case .escutando:
+            return "stop.fill"
+        case .pensando, .ocioso:
+            return "mic.fill"
+        }
+    }
+
+    private var corDoBotao: Color {
+        estado == .falando ? PaletaDaVoz.falando : PaletaDaVoz.escutando
+    }
+
+    private var rotuloDoMicrofone: String {
+        switch estado {
+        case .falando:
+            return "Interromper a fala"
+        case .escutando:
+            return "Parar de escutar e enviar"
+        case .pensando, .ocioso:
+            return "Começar a escutar"
+        }
+    }
+
+    private var dicaDoMicrofone: String {
+        switch estado {
+        case .falando:
+            return "Cala a resposta na hora e volta a escutar."
+        case .escutando:
+            return "Encerra a escuta e envia a transcrição em tela."
+        case .pensando, .ocioso:
+            return "Liga o microfone e começa a transcrever em português."
+        }
+    }
+
+    private func acaoDoMicrofone() {
+        switch estado {
+        case .falando:
+            voz.calar()
+        case .escutando:
+            // Toque manual no botão significa "terminei": envia mesmo com menos de
+            // três palavras, ao contrário da pausa automática.
+            let texto = voz.textoParcial.trimmingCharacters(in: .whitespacesAndNewlines)
+            voz.parar()
+            voz.textoParcial = ""
+            if !texto.isEmpty {
+                enviar(texto)
+            }
+        case .pensando, .ocioso:
+            tentarIniciar()
+        }
+    }
+
+    private func tentarIniciar() {
+        do {
+            try voz.iniciar()
+        } catch {
+            mensagemDeErro = error.localizedDescription
+            mostrarErro = true
+        }
+    }
+}
+
+#Preview {
+    TelaDeVoz(voz: GerenciadorDeVoz(), enviar: { _ in }, fechar: {})
+}

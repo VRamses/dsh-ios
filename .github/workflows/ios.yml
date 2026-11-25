@@ -2,6 +2,11 @@ name: iOS
 
 on:
   workflow_dispatch:
+    inputs:
+      ipa:
+        description: 'Tambem empacotar o .ipa sem assinatura'
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -115,6 +120,7 @@ jobs:
 
   ipa:
     name: IPA sem assinatura
+    if: github.event.inputs.ipa != 'false'
     runs-on: macos-15
     timeout-minutes: 45
     steps:
