@@ -139,3 +139,25 @@ arte de terceiro, para o app não carregar licença de imagem.
   a gravação falha com acesso negado. Para refazer:
   `powershell -NoProfile -ExecutionPolicy Bypass -File Recursos\icone\gerar-icone.ps1`.
 
+## 9. Prova de que a ponte responde
+
+O caminho do motor da ponte não é promessa: ele foi medido neste notebook, contra o servidor
+que está no ar. O app chama exatamente estas rotas, com `Authorization: Bearer <token>`.
+
+| o que foi testado | como | resultado |
+|---|---|---|
+| endereço padrão do app (`Preferencias.enderecoDaPontePadrao`) | GET `https://desktop-nvl84h2.tail056d02.ts.net:8443/v1/saude` | HTTP 200, `ok: true`, `rotulo: NOTEBOOK`, `maquina: DESKTOP-NVL84H2`, `dsh.aberto: true` |
+| contrato que `ServicoPonte.saude()` lê | mesmos campos `ok`, `rotulo`, `maquina`, `dsh.erro` | todos presentes na resposta |
+| listagem usada pela tela de sessões | GET `/v1/sessoes` | HTTP 200 com 37 sessões, cada uma com `id`, `titulo`, `rodando`, `turnos` |
+| exposição do servidor | `tailscale serve status` | `https://desktop-nvl84h2.tail056d02.ts.net:8443` encaminha para `http://127.0.0.1:43130`, restrito ao tailnet |
+| token e limites | `ponte/ponte.json` | `limiteTexto: 8192`, `prefixo: [ponte NOTEBOOK]`, escrita liberada, 120 requisições por minuto |
+
+Duas consequências práticas:
+
+1. O endereço que vem preenchido de fábrica no app é o do notebook, então quem instala e tem
+   Tailscale no iPhone só precisa colar o token. Se a ponte for de outra máquina, o endereço
+   muda em Ajustes.
+2. O Tailscale precisa estar ativo **no iPhone e no computador**, na mesma tailnet. Sem isso o
+   endereço não resolve, e é esse o erro que aparece na conversa.
+
+

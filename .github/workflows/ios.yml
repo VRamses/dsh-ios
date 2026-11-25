@@ -18,7 +18,11 @@ concurrency:
 env:
   APP: DSH
   BUNDLE_ID: dev.ramses.dsh
-  XCODE_ALVO: "16.3"
+  # O catálogo de assets obriga o actool a casar o SDK do Xcode com um runtime de
+  # simulador instalado no runner. Com o Xcode 16.3 (SDK 18.4) o actool falha com
+  # "No simulator runtime version ... available", porque o runner só tem runtimes
+  # 18.5/18.6/26.x. O 16.4 traz o SDK 18.5, que casa com o runtime 22F77.
+  XCODE_ALVO: "16.4"
 
 jobs:
   simulador:
@@ -32,12 +36,16 @@ jobs:
       - name: Selecionar Xcode
         run: |
           set -euo pipefail
+          echo "Xcodes instalados no runner:"
+          ls -d /Applications/Xcode*.app || true
+          xcrun simctl list runtimes || true
           if [ -d "/Applications/Xcode_${XCODE_ALVO}.app" ]; then
-            sudo xcode-select -s "/Applications/Xcode_${XCODE_ALVO}.app"
+            ALVO="/Applications/Xcode_${XCODE_ALVO}.app"
           else
-            echo "aviso: Xcode ${XCODE_ALVO} ausente no runner; usando o padrao"
-            ls -d /Applications/Xcode*.app || true
+            echo "aviso: Xcode ${XCODE_ALVO} ausente no runner; usando o mais novo instalado"
+            ALVO=$(ls -d /Applications/Xcode*.app | tail -1)
           fi
+          sudo xcode-select -s "$ALVO"
           xcodebuild -version
 
       - name: Instalar XcodeGen
@@ -137,12 +145,16 @@ jobs:
       - name: Selecionar Xcode
         run: |
           set -euo pipefail
+          echo "Xcodes instalados no runner:"
+          ls -d /Applications/Xcode*.app || true
+          xcrun simctl list runtimes || true
           if [ -d "/Applications/Xcode_${XCODE_ALVO}.app" ]; then
-            sudo xcode-select -s "/Applications/Xcode_${XCODE_ALVO}.app"
+            ALVO="/Applications/Xcode_${XCODE_ALVO}.app"
           else
-            echo "aviso: Xcode ${XCODE_ALVO} ausente no runner; usando o padrao"
-            ls -d /Applications/Xcode*.app || true
+            echo "aviso: Xcode ${XCODE_ALVO} ausente no runner; usando o mais novo instalado"
+            ALVO=$(ls -d /Applications/Xcode*.app | tail -1)
           fi
+          sudo xcode-select -s "$ALVO"
           xcodebuild -version
 
       - name: Instalar XcodeGen
