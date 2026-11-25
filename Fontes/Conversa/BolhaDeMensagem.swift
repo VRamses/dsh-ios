@@ -14,6 +14,14 @@ struct BolhaDeMensagem: View {
     var anexos: [Anexo]
     var estaAoVivo: Bool
 
+    /// O detector de artefato varre a resposta inteira e o `body` de uma resposta
+    /// ao vivo é reavaliado a cada fragmento do streaming; o cache dentro da
+    /// bolha guarda o último texto detectado para a varredura não se repetir em
+    /// reavaliações causadas por outro motivo. A folha aberta fica aqui porque o
+    /// cartão é o único ponto que conhece o artefato.
+    @State private var cacheDeArtefatos = CacheDeArtefatos()
+    @State private var artefatoAberto: Artefato?
+
     init(
         papel: Papel,
         texto: String,
@@ -78,6 +86,15 @@ struct BolhaDeMensagem: View {
             } else {
                 TextoRico(texto)
                     .foregroundStyle(Cores.texto)
+                if !artefatosDetectados.isEmpty {
+                    VStack(alignment: .leading, spacing: Espaco.s) {
+                        ForEach(artefatosDetectados) { artefato in
+                            CartaoDeArtefato(artefato: artefato) {
+                                artefatoAberto = artefato
+                            }
+                        }
+                    }
+                }
                 if estaAoVivo && (raciocinio ?? "").isEmpty {
                     trabalhoEmCurso
                 }
@@ -87,6 +104,16 @@ struct BolhaDeMensagem: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .sheet(item: $artefatoAberto) { artefato in
+            TelaDeArtefato(artefato: artefato)
+        }
+    }
+
+    /// Artefatos da resposta, na ordem em que o modelo os escreveu. A leitura
+    /// passa pelo cache, que só roda o detector quando o texto muda de verdade e
+    /// nunca em texto vazio.
+    private var artefatosDetectados: [Artefato] {
+        cacheDeArtefatos.artefatos(de: texto)
     }
 
     /// Só aparece quando não há raciocínio a mostra: sem ele, o cartão do
@@ -145,5 +172,29 @@ struct BolhaDeMensagem: View {
         case .codigo: return "chevron.left.forwardslash.chevron.right"
         default: return "doc"
         }
+    }
+}
+
+/// Cache da bolha para o detector de artefato.
+///
+/// O `body` de uma resposta ao vivo é reavaliado a cada fragmento que chega, e o
+/// detector varre a resposta inteira; sem o cache, toda reavaliação por outro
+/// motivo (rolagem, mudança da lista, seleção) varreria o mesmo texto de novo.
+/// O texto vazio nem chega ao detector. A instância vive no `@State` da bolha:
+/// sendo classe, a mutação é por referência e não é escrita de estado, então o
+/// cache não agenda um segundo desenho para o cartão aparecer.
+private final class CacheDeArtefatos {
+    private var textoDetectado: String?
+    private var guardados: [Artefato] = []
+
+    func artefatos(de texto: String) -> [Artefato] {
+        if let anterior = textoDetectado, anterior == texto { return guardados }
+        textoDetectado = texto
+        guard !texto.isEmpty else {
+            guardados = []
+            return []
+        }
+        guardados = DetectorDeArtefato.detectar(em: texto)
+        return guardados
     }
 }

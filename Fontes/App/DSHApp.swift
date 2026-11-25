@@ -49,11 +49,18 @@ struct DSHApp: App {
         WindowGroup {
             Group {
                 if let contentor {
-                    TelaPrincipal(conversaInicial: conversaInicial, servicoPonte: servicoPonte)
+                    TelaPrincipal(
+                        conversaInicial: conversaInicial,
+                        servicoPonte: servicoPonte,
+                        abrirSessoesInicial: rota == .dsh
+                    )
                         .id(identidadeDaRaiz)
                         .modelContainer(contentor)
                         .sheet(isPresented: apresentandoArtefato) {
                             TelaDeArtefato(artefato: DadosDeDemonstracao.artefato())
+                        }
+                        .sheet(isPresented: apresentandoAjustes) {
+                            TelaDeAjustes()
                         }
                         .fullScreenCover(isPresented: apresentandoVoz) {
                             TelaDeVoz(
@@ -111,6 +118,15 @@ struct DSHApp: App {
         )
     }
 
+    private var apresentandoAjustes: Binding<Bool> {
+        Binding(
+            get: { rota == .ajustes },
+            set: { apresentando in
+                if !apresentando { rota = .conversa }
+            }
+        )
+    }
+
     // MARK: - Rotas
 
     @MainActor
@@ -121,6 +137,8 @@ struct DSHApp: App {
         switch recebida {
         case .voz:
             rota = .voz
+        case .ajustes:
+            rota = .ajustes
         case .novo:
             rota = .conversa
             if origem == TratadorDeUrl.origemDeCompartilhamento {

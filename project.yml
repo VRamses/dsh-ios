@@ -53,6 +53,8 @@ targets:
         optional: true
       - path: Fontes/Voz
         optional: true
+      - path: Fontes/Ajustes
+        optional: true
       - path: Fontes/Ferramentas
         optional: true
       - path: Fontes/Plataforma

@@ -19,6 +19,7 @@ struct TelaPrincipal: View {
     @State private var novaConversaPendente = false
     @State private var menuAberto = false
     @State private var sessoesAbertas = false
+    @State private var ajustesAbertos = false
     @State private var rascunho = ""
     @State private var anexos: [Anexo] = []
     @State private var modeloEscolhido = "deepseek-chat"
@@ -26,13 +27,27 @@ struct TelaPrincipal: View {
     @State private var sessaoEscolhida: String?
     @State private var tituloDaSessao: String?
     @State private var configurou = false
+    @State private var abriuSessoesIniciais = false
 
     let conversaInicial: Conversa?
     let servicoPonte: ServicoPonte?
+    let abrirSessoesInicial: Bool
 
-    init(conversaInicial: Conversa? = nil, servicoPonte: ServicoPonte? = nil) {
+    init(
+        conversaInicial: Conversa? = nil,
+        servicoPonte: ServicoPonte? = nil,
+        abrirSessoesInicial: Bool = false
+    ) {
         self.conversaInicial = conversaInicial
         self.servicoPonte = servicoPonte
+        self.abrirSessoesInicial = abrirSessoesInicial
+    }
+
+    /// A ponte é montada de novo a cada uso: assim o endereço e o token salvos
+    /// em Ajustes valem sem reabrir o app, e a que veio de fora fica de reserva.
+    @MainActor
+    private var ponteAtual: ServicoPonte? {
+        ServicoPonte.aPartirDasPreferencias() ?? servicoPonte
     }
 
     var body: some View {
@@ -54,6 +69,19 @@ struct TelaPrincipal: View {
             .sheet(isPresented: $sessoesAbertas) {
                 TelaSessoesDsh(modelo: modelo, aoAbrir: abrirSessao)
                     .environment(\.locale, Locale(identifier: "pt_BR"))
+            }
+            .sheet(isPresented: $ajustesAbertos) {
+                TelaDeAjustes()
+                    .environment(\.locale, Locale(identifier: "pt_BR"))
+            }
+            .onChange(of: ajustesAbertos) { _, aberto in
+                guard !aberto else { return }
+                Task { @MainActor in
+                    // O seletor de modelo e a ponte vêm das preferências: ao
+                    // fechar Ajustes, a tela recopia o que mudou sem reabrir o app.
+                    modeloEscolhido = Preferencias.compartilhada.modelo
+                    await configurar()
+                }
             }
             .task { await configurar() }
         }
@@ -251,6 +279,7 @@ struct TelaPrincipal: View {
                 aoFixar: fixar,
                 aoApagar: apagar,
                 aoAbrirSessoes: abrirSessoes,
+                aoAbrirAjustes: abrirAjustes,
                 aoFechar: fecharMenu
             )
             .frame(width: 320)
@@ -290,7 +319,7 @@ struct TelaPrincipal: View {
             usandoPonte = false
             configurou = true
         }
-        modelo.preparar(conversa: conversaEfetiva, contexto: contexto, ponte: servicoPonte)
+        modelo.preparar(conversa: conversaEfetiva, contexto: contexto, ponte: ponteAtual)
         modelo.definirSessao(sessaoEscolhida)
         modelo.configurar(
             modelo: modeloEscolhido,
@@ -298,6 +327,13 @@ struct TelaPrincipal: View {
             maxTokens: preferencias.maxTokens,
             usaPonte: usandoPonte && sessaoEscolhida != nil
         )
+        // A rota `-rota dsh` do CI reaproveita o mesmo caminho do botão "Sessões
+        // do DSH": abre a folha pelo estado que o menu já usa, e só depois de a
+        // ponte estar preparada no view model.
+        if abrirSessoesInicial && !abriuSessoesIniciais {
+            abriuSessoesIniciais = true
+            sessoesAbertas = true
+        }
     }
 
     @MainActor
@@ -310,7 +346,7 @@ struct TelaPrincipal: View {
         rascunho = ""
         anexos = []
         let alvo = novaConversaPendente ? nil : conversaEfetiva
-        modelo.preparar(conversa: alvo, contexto: contexto, ponte: servicoPonte)
+        modelo.preparar(conversa: alvo, contexto: contexto, ponte: ponteAtual)
         modelo.enviar(conteudo, anexos: anexosDoEnvio)
     }
 
@@ -391,6 +427,12 @@ struct TelaPrincipal: View {
     private func abrirSessoes() {
         fecharMenu()
         sessoesAbertas = true
+    }
+
+    @MainActor
+    private func abrirAjustes() {
+        fecharMenu()
+        ajustesAbertos = true
     }
 
     @MainActor

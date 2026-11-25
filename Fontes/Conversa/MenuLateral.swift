@@ -14,6 +14,7 @@ struct MenuLateral: View {
     var aoFixar: @MainActor (Conversa) -> Void
     var aoApagar: @MainActor (Conversa) -> Void
     var aoAbrirSessoes: @MainActor () -> Void
+    var aoAbrirAjustes: @MainActor () -> Void
     var aoFechar: @MainActor () -> Void
 
     @State private var busca = ""
@@ -41,6 +42,7 @@ struct MenuLateral: View {
             botaoDeNovaConversa
             rolagemDeConversas
             Divider()
+            botaoDeAjustes
             botaoDeSessoes
         }
         .padding(Espaco.l)
@@ -209,6 +211,28 @@ struct MenuLateral: View {
                 Label("Apagar", systemImage: "trash")
             }
         }
+    }
+
+    private var botaoDeAjustes: some View {
+        Button(action: { aoAbrirAjustes() }) {
+            HStack(spacing: Espaco.s) {
+                Image(systemName: "gearshape")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Cores.textoFraco)
+                Text("Ajustes")
+                    .font(Tipografia.corpo())
+                    .foregroundStyle(Cores.texto)
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Cores.textoFraco)
+            }
+            .frame(height: 44)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Ajustes")
+        .accessibilityHint("Abre as chaves da DeepSeek, o endereço e o token da ponte.")
     }
 
     private var botaoDeSessoes: some View {
