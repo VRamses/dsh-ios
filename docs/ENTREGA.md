@@ -17,6 +17,10 @@ O motor da ponte é o que mantém os seus MCPs (Droz, Miro, Jira, Zendesk) dispo
 pergunta é respondida pela sua instalação do DSH, e não por um modelo solto. O motor direto
 serve quando o notebook está desligado; nele não existe MCP nenhum, só o modelo.
 
+O motor se escolhe em Ajustes, no menu lateral, e a escolha é lida de novo quando a folha
+fecha. A ponte só entra em uso quando existe uma sessão do DSH escolhida nesta execução, porque
+sem sessão não há para onde mandar a pergunta; a própria tela de Ajustes diz isso.
+
 ## 2. Como o app compila
 
 Não existe compilador Swift nesta máquina Windows e não dá para instalar um: compilar para iOS
@@ -118,7 +122,7 @@ Outros limites, sem rodeio:
 - `project.yml`: geração do projeto Xcode com XcodeGen, três alvos.
 - `.github/workflows/ios.yml`: a compilação no Actions, com os jobs `simulador` e `ipa`.
 - `Fontes/`: o código, separado por assunto (App, Nucleo, Provedores, Compartilhado, Desenho,
-  Conversa, Artefatos, Voz, Ferramentas, Plataforma, Widget, Extensao).
+  Conversa, Artefatos, Ajustes, Voz, Ferramentas, Plataforma, Widget, Extensao).
 - `Recursos/`: os três `Info.plist`, os três `.entitlements` e o catálogo `Assets.xcassets`.
 
 ## 8. O ícone do app
@@ -159,5 +163,66 @@ Duas consequências práticas:
    muda em Ajustes.
 2. O Tailscale precisa estar ativo **no iPhone e no computador**, na mesma tailnet. Sem isso o
    endereço não resolve, e é esse o erro que aparece na conversa.
+
+## 10. O que a última rodada do CI prova
+
+A rodada `45550638510` rodou sobre o commit `720aa4e` e terminou com os dois jobs em `success`.
+Os números abaixo saíram do artefato baixado e aberto aqui, não do log do Actions.
+
+| o que | como foi medido | resultado |
+|---|---|---|
+| job `simulador` | compilar, instalar no iPhone 16 do simulador e capturar as cinco rotas | `success`, 5 capturas de 1206x2622 |
+| job `ipa` | empacotar sem assinatura | `success`, `DSH.ipa` com 815.792 bytes |
+| binário | `Payload/DSH.app/DSH` dentro do IPA | 3.084.832 bytes |
+| catálogo de ícones | `Payload/DSH.app/Assets.car` | 32.735 bytes, ou seja, o catálogo compilou e não saiu vazio |
+| ícones derivados | PNGs dentro do pacote | `AppIcon60x60@2x.png` com 2.861 bytes e `AppIcon76x76@2x~ipad.png` com 3.500 bytes |
+| `Info.plist` do pacote | lido com `plistlib` | `dev.ramses.dsh`, versão `1.0.0` (build `1`), `MinimumOSVersion` 18.0, `DTXcode` 1640, `DTPlatformVersion` 18.5 |
+| ícone ligado ao alvo | `CFBundleIconName` e `CFBundlePrimaryIcon` | `AppIcon`, com `CFBundleIconFiles = [AppIcon60x60]` |
+
+O que cada captura mostra, com o tamanho do arquivo:
+
+| captura | bytes | o que está na tela |
+|---|---|---|
+| `conversa.png` | 293.082 | o fim de uma resposta, com o bloco de código e dois cartões de artefato: "Relógio de parede" (HTML) e "Relógio em SVG" (SVG) |
+| `artefato.png` | 666.946 | o visualizador do artefato HTML rodando o relógio dentro do `WKWebView`, com o ponteiro na hora do relógio do simulador, e o seletor entre Visualização e Código |
+| `ajustes.png` | 304.975 | a folha de Ajustes, com o seletor de motor, o cofre da DeepSeek, o endereço e o token da ponte, e as ações de salvar e apagar |
+| `dsh.png` | 155.336 | a folha de sessões aberta pela rota `dsh`, no estado sem ponte configurada, que é o estado de fábrica do simulador |
+| `voz.png` | 750.658 | a tela de voz com o botão de gravação |
+
+As cinco capturas estão versionadas em `docs/capturas/`, tiradas desta rodada, para não
+depender de baixar artefato do Actions para olhar a tela:
+
+![Conversa com os dois cartões de artefato](capturas/conversa.png)
+
+![Visualizador do artefato HTML rodando o relógio](capturas/artefato.png)
+
+![Ajustes com o motor, o cofre e a ponte](capturas/ajustes.png)
+
+O que a rodada **não** prova, para não dar a ela mais peso do que tem:
+
+- nada foi instalado em iPhone físico, e o IPA não é assinado: a rodada mostra que o código
+  compila, empacota e roda no simulador, não que o aparelho aceita o arquivo;
+- nenhuma captura exercita toque: o app é aberto nas rotas e fotografado, sem digitar, rolar ou
+  tocar em botão. Salvar chave, testar conexão e enviar pela ponte continuam verificados só por
+  leitura de código;
+- a voz capturada é a tela, não o resultado de um reconhecimento: o microfone do simulador é
+  permissão dada pelo `simctl`, sem áudio real;
+- as capturas são do modo claro do simulador; o modo escuro não é fotografado.
+
+## 11. O que fica aberto
+
+O que está abaixo é conhecido e não escondido. Nenhum item impede usar o app no dia a dia, mas
+cada um é uma promessa que o app ainda não cumpre.
+
+| o que | estado | por que não foi feito |
+|---|---|---|
+| anexo na conversa | a mensagem mostra o ícone e o nome do arquivo, não a miniatura | existe `CartaoDeAnexo` pronto em `Fontes/Artefatos`, e a bolha ainda usa a lista de nomes |
+| validar a chave da DeepSeek em Ajustes | só confere o prefixo `sk-` | a API não tem rota de validação de chave, e inventar uma custaria uma chamada paga a cada toque |
+| voz automática | a preferência é gravada, mas a tela de voz não a lê | a tela ainda tem botão de gravar e parar manual |
+| bloco de código muito longo | cresce sem limite dentro da bolha | cortar com "mostrar mais" mexe no `TextoRico`, e a conversa de demonstração já usa o limite como prova de rolagem |
+| primeiro quadro da resposta ao vivo | o recuo pendente aparece a partir do segundo quadro | o streaming chega em pedaços e o primeiro é renderizado antes de haver linha completa |
+| criar sessão pela ponte | `POST /v1/sessoes` e `/mensagem` foram verificados só por leitura de código | a rodada do CI não tem tailnet, então não há como exercitar a ponte de dentro do simulador |
+| folha do artefato durante a resposta | pode fechar sozinha quando o texto ao vivo vira mensagem gravada | a bolha ao vivo é substituída no fim do stream, e com ela o estado que segurava a folha |
+| widget e compartilhamento no iPhone | exigem conta paga do programa de desenvolvedor | os dois alvos usam App Group, que a conta gratuita não libera; com conta gratuita, só o app principal instala |
 
 
