@@ -9,8 +9,11 @@ import UIKit
 // MARK: - Conexão com a conversa
 
 // Contrato mínimo entre a intenção e o cliente de rede do app.
-// A implementação real é do swift-base (ServicoDeepSeek ou ServicoPonte) e será
-// registrada no boot do app com `ConectorDePerguntas.compartilhado.motor = ...`.
+// A implementação real é do swift-base: `AdaptadorDePerguntaRapida`, em
+// `Fontes/Nucleo/`, que resolve por ServicoPonte quando há token e por
+// ServicoDeepSeek com a chave do cofre quando não há.
+// O boot do app chama `AdaptadorDePerguntaRapida.registrar()`, que instala o
+// motor em `ConectorDePerguntas.compartilhado.motor`.
 // Não criamos cliente HTTP aqui de propósito: duplicar a rede significaria
 // duplicar chave, token e tratamento de erro da conversa.
 protocol MotorDePerguntaRapida {

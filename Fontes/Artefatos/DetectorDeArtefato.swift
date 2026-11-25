@@ -113,10 +113,11 @@ enum DetectorDeArtefato {
         if ehHtmlCompleto(minusculo) { return .html }
         if temSvgCompleto(minusculo) { return .svg }
 
-        // Cerca marcada como html sem estrutura é pedaço de página, não página.
-        if lingua == "html" || lingua == "xhtml" { return nil }
-
+        // Gráfico é widget de tela única e roda mesmo fora de um documento completo.
         if ehGrafico(lingua: lingua, minusculo: minusculo) { return .grafico }
+
+        // Cerca marcada como html sem estrutura e sem desenho é pedaço de página: fica
+        // de fora para não abrir uma tela branca no meio da resposta.
         return nil
     }
 
@@ -154,7 +155,7 @@ enum DetectorDeArtefato {
         if bruta.hasPrefix("{") {
             bruta = bruta.trimmingCharacters(in: CharacterSet(charactersIn: "{}"))
         }
-        let primeira = bruta.split(whereSeparator: { $0.isWhitespace }).first.map(String.init) ?? ""
+        let primeira = bruta.split(whereSeparator: { $0.isWhitespace }).map { String($0) }.first ?? ""
         let semPontuacao = primeira.trimmingCharacters(in: CharacterSet(charactersIn: ".:;,"))
 
         switch semPontuacao {
@@ -219,7 +220,7 @@ enum DetectorDeArtefato {
         }
 
         for linha in semEspaco.split(separator: "\n") {
-            let texto = linha.trimmingCharacters(in: .whitespaces)
+            let texto = String(linha).trimmingCharacters(in: .whitespaces)
             if texto.hasPrefix("//") {
                 return normalizarTexto(String(texto.dropFirst(2)))
             }
@@ -236,7 +237,7 @@ enum DetectorDeArtefato {
 
     private static func primeiraLinhaDeTexto(_ codigo: String) -> String? {
         for linha in codigo.split(separator: "\n") {
-            let texto = linha.trimmingCharacters(in: .whitespaces)
+            let texto = String(linha).trimmingCharacters(in: .whitespaces)
             guard !texto.isEmpty else { continue }
             // Linha que começa com marcação ou com chave é estrutura, não descrição.
             guard !texto.hasPrefix("<"), !texto.hasPrefix("{"), !texto.hasPrefix("}") else { return nil }

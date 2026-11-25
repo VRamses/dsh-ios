@@ -53,53 +53,60 @@ struct VisualizadorDeArtefato: UIViewRepresentable {
         web.stopLoading()
         web.configuration.userContentController.removeScriptMessageHandler(forName: "dshConsole")
     }
-}
 
-/// Recebe o console da página, os erros de script e as falhas de navegação, e repassa
-/// para a faixa da tela. É classe porque os protocolos do WebKit exigem NSObject.
-final class Coordenador: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
-    var registros: Binding<[String]>
-    var ultimaRecarga = -1
+    /// Recebe o console da página, os erros de script e as falhas de navegação, e repassa
+    /// para a faixa da tela. Fica aninhado para não disputar nome com o resto do app e é
+    /// classe porque os protocolos do WebKit exigem NSObject.
+    final class Coordenador: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
+        var registros: Binding<[String]>
+        var ultimaRecarga = -1
 
-    private var ultimoRegistro = ""
+        private var ultimoRegistro = ""
 
-    init(registros: Binding<[String]>) {
-        self.registros = registros
-    }
-
-    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-        guard message.name == "dshConsole", let texto = message.body as? String else { return }
-        registrar(texto)
-    }
-
-    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        webView.evaluateJavaScript("document.body ? (document.body.children.length + (document.body.textContent || '').trim().length) : -1") { [weak self] resultado, _ in
-            guard let quantidade = resultado as? Int, quantidade == 0 else { return }
-            self?.registrar("aviso: a página carregou sem conteúdo visível")
+        init(registros: Binding<[String]>) {
+            self.registros = registros
         }
-    }
 
-    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-        registrar("erro: falha ao carregar (\(error.localizedDescription))")
-    }
+        func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+            guard message.name == "dshConsole", let texto = message.body as? String else { return }
+            registrar(texto)
+        }
 
-    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-        registrar("erro: falha ao carregar (\(error.localizedDescription))")
-    }
+        func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+            // Recarga recomeça a página: sem isto o mesmo erro da carga anterior seria
+            // engolido pela deduplicação e a faixa ficaria vazia com a tela em branco.
+            ultimoRegistro = ""
+        }
 
-    private func registrar(_ texto: String) {
-        DispatchQueue.main.async {
-            // Biblioteca de gráfico costuma repetir o mesmo aviso em laço: sem este
-            // corte a faixa virava uma parede de linhas iguais.
-            guard texto != self.ultimoRegistro else { return }
-            self.ultimoRegistro = texto
-
-            var lista = self.registros.wrappedValue
-            lista.append(texto)
-            if lista.count > 40 {
-                lista.removeFirst(lista.count - 40)
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            webView.evaluateJavaScript("document.body ? (document.body.children.length + (document.body.textContent || '').trim().length) : -1") { [weak self] resultado, _ in
+                guard let quantidade = resultado as? Int, quantidade == 0 else { return }
+                self?.registrar("aviso: a página carregou sem conteúdo visível")
             }
-            self.registros.wrappedValue = lista
+        }
+
+        func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+            registrar("erro: falha ao carregar (\(error.localizedDescription))")
+        }
+
+        func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+            registrar("erro: falha ao carregar (\(error.localizedDescription))")
+        }
+
+        private func registrar(_ texto: String) {
+            DispatchQueue.main.async {
+                // Biblioteca de gráfico costuma repetir o mesmo aviso em laço: sem este
+                // corte a faixa virava uma parede de linhas iguais.
+                guard texto != self.ultimoRegistro else { return }
+                self.ultimoRegistro = texto
+
+                var lista = self.registros.wrappedValue
+                lista.append(texto)
+                if lista.count > 40 {
+                    lista.removeFirst(lista.count - 40)
+                }
+                self.registros.wrappedValue = lista
+            }
         }
     }
 }

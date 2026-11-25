@@ -124,10 +124,10 @@ struct TelaDeArtefato: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 2) {
-                    ForEach(Array(registros.enumerated()), id: \.offset) { par in
-                        Text(par.element)
+                    ForEach(registros.indices, id: \.self) { indice in
+                        Text(registros[indice])
                             .font(Tipografia.codigo(11))
-                            .foregroundStyle(par.element.hasPrefix("erro") ? Cores.perigo : Cores.textoFraco)
+                            .foregroundStyle(registros[indice].hasPrefix("erro") ? Cores.perigo : Cores.textoFraco)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
@@ -149,24 +149,15 @@ struct TelaDeArtefato: View {
         let extensao = artefato.tipo == .svg ? "svg" : "html"
         let nome = "\(TelaDeArtefato.nomeSeguro(artefato.titulo))-\(artefato.id).\(extensao)"
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(nome)
+        // SVG sai cru para abrir em ferramenta de desenho; HTML e gráfico saem como a
+        // página montada, que é o que o usuário está vendo na tela.
+        let conteudo = artefato.tipo == .svg ? artefato.codigo : documento
         do {
-            try documentoParaExportar().write(to: url, atomically: true, encoding: .utf8)
+            try conteudo.write(to: url, atomically: true, encoding: .utf8)
             urlParaExportar = url
         } catch {
             // Sem arquivo temporário o botão de exportar simplesmente não aparece.
             urlParaExportar = nil
-        }
-    }
-
-    private func documentoParaExportar() -> String {
-        switch artefato.tipo {
-        case .html:
-            return TelaDeArtefato.comViewport(artefato.codigo)
-        case .svg:
-            // SVG exportado cru abre em ferramenta de desenho; embrulhado em HTML não.
-            return artefato.codigo
-        case .grafico:
-            return TelaDeArtefato.documentoParaVisualizar(artefato)
         }
     }
 

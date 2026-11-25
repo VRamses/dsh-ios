@@ -27,6 +27,7 @@ final class ConversaViewModel: ObservableObject {
     private var contexto: ModelContext?
     private var ponte: ServicoPonte?
     private var tarefa: Task<Void, Never>?
+    private var provedorDoEnvio: (any ProvedorDeConversa)?
 
     private var modelo = "deepseek-chat"
     private var temperatura = 1.0
@@ -91,8 +92,9 @@ final class ConversaViewModel: ObservableObject {
     @MainActor
     func cancelar() {
         tarefa?.cancel()
-        guard let provedor = provedorAtual else { return }
-        Task { await provedor.cancelar() }
+        if let provedorDoEnvio {
+            Task { await provedorDoEnvio.cancelar() }
+        }
     }
 
     @MainActor
@@ -116,6 +118,7 @@ final class ConversaViewModel: ObservableObject {
             return
         }
 
+        provedorDoEnvio = provedor
         let pedido = montarPedido(de: conversa)
 
         var resposta = ""
@@ -157,6 +160,7 @@ final class ConversaViewModel: ObservableObject {
         textoAoVivo = ""
         raciocinioAoVivo = ""
         estaRespondendo = false
+        provedorDoEnvio = nil
         tarefa = nil
     }
 
@@ -198,8 +202,7 @@ final class ConversaViewModel: ObservableObject {
             }
             return ponte
         }
-        guard let chave = try? CofreDeChaves.ler(ChaveDoCofre.apiKeyDeepSeek),
-              let apiKey = chave,
+        guard let apiKey = try? CofreDeChaves.ler(ChaveDoCofre.apiKeyDeepSeek),
               !apiKey.isEmpty
         else { return nil }
         return ServicoDeepSeek(apiKey: apiKey)

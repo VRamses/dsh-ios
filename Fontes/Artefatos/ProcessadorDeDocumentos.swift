@@ -30,8 +30,8 @@ enum ProcessadorDeDocumentos {
 
     static func dePdf(url: URL) async throws -> Anexo {
         let nome = url.lastPathComponent.isEmpty ? "documento.pdf" : url.lastPathComponent
-        let tamanho = tamanhoEmBytes(de: url)
         return try await foraDaMainThread {
+            let tamanho = tamanhoEmBytes(de: url)
             let texto = try textoDePdf(url)
             return Anexo(id: UUID(), nome: nome, tipo: .pdf, texto: truncar(texto), tamanhoEmBytes: tamanho)
         }
@@ -122,6 +122,9 @@ enum ProcessadorDeDocumentos {
             }
 
             if interrompido {
+                guard !partes.isEmpty else {
+                    throw erroLocal("O OCR do PDF não terminou dentro do tempo.")
+                }
                 partes.append("[aviso: OCR interrompido após \(Int(prazoDoOcr)) segundos; as páginas seguintes ficaram de fora.]")
             }
         }
