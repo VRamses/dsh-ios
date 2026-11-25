@@ -17,10 +17,10 @@ struct BarraDeEntrada: View {
     var modeloAtual: String
     var sessaoAtual: String?
 
-    var aoEnviar: () -> Void
-    var aoParar: () -> Void
-    var aoEscolherModelo: (String) -> Void
-    var aoEscolherSessao: () -> Void
+    var aoEnviar: @MainActor () -> Void
+    var aoParar: @MainActor () -> Void
+    var aoEscolherModelo: @MainActor (String) -> Void
+    var aoEscolherSessao: @MainActor () -> Void
 
     @State private var escolhendoArquivo = false
     @State private var processando = false

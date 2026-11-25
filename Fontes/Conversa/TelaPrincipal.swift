@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import Combine
 
 /// A tela da conversa. É a única tela do app: transcrito no meio, gaveta de
 /// conversas à esquerda, barra de entrada flutuante no pé.
@@ -94,12 +95,14 @@ struct TelaPrincipal: View {
             .scrollDismissesKeyboard(.interactively)
             .onAppear { rolar(rolagem, animado: false) }
             .onChange(of: modelo.textoAoVivo) { _, _ in rolar(rolagem) }
-            .onChange(of: modelo.estaRespondendo) { _, respondendo in
-                if respondendo {
+            .onChange(of: modelo.estaRespondendo) { _, _ in rolar(rolagem) }
+            .onReceive(modelo.$conversa) { atual in
+                // Quando o modelo cria a conversa nova, a tela para de fingir
+                // uma conversa vazia e passa a mostrar a que acabou de nascer.
+                if let atual, novaConversaPendente {
                     novaConversaPendente = false
-                    conversaAtual = nil
+                    conversaAtual = atual
                 }
-                rolar(rolagem)
             }
         }
     }
@@ -256,7 +259,9 @@ struct TelaPrincipal: View {
         if !configurou {
             conversaAtual = conversaInicial
             modeloEscolhido = preferencias.modelo
-            usandoPonte = preferencias.usaPonte
+            // A ponte só vale com uma sessão escolhida nesta execução: guardar
+            // só o "usa ponte" faria a tela prometer um caminho que não existe.
+            usandoPonte = false
             configurou = true
         }
         modelo.preparar(conversa: conversaEfetiva, contexto: contexto, ponte: servicoPonte)
@@ -278,11 +283,8 @@ struct TelaPrincipal: View {
         }
         rascunho = ""
         anexos = []
-        if novaConversaPendente {
-            novaConversaPendente = false
-            conversaAtual = nil
-        }
-        modelo.preparar(conversa: conversaEfetiva, contexto: contexto, ponte: servicoPonte)
+        let alvo = novaConversaPendente ? nil : conversaEfetiva
+        modelo.preparar(conversa: alvo, contexto: contexto, ponte: servicoPonte)
         modelo.enviar(conteudo, anexos: anexosDoEnvio)
     }
 

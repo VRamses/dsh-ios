@@ -2,32 +2,42 @@ import Combine
 import SwiftData
 import SwiftUI
 
-// Ponto de entrada do DSH. Enquanto as telas do swift-chat não estão no disco,
-// a raiz é uma tela mínima própria (TelaInicial); quando `TelaPrincipal` chegar,
-// a troca é só a linha dentro da WindowGroup.
+// Ponto de entrada do DSH. Monta a `TelaPrincipal` do swift-chat, trata os
+// endereços dsh:// vindos da extensão de compartilhamento, instala o motor de
+// pergunta rápida usado pelas intenções do sistema e abre as rotas de captura
+// do CI (`-rota voz` e `-rota artefato`).
 @main
 struct DSHApp: App {
     @State private var rota: RotaDeLancamento
-    @State private var rotaDoApp: RotaDoApp = .conversa
     @State private var demonstracao: Bool
-    @State private var textoCompartilhado: String?
     @State private var conversaDeDemonstracao: Conversa?
+    @State private var conversaCompartilhada: Conversa?
+    @StateObject private var voz: GerenciadorDeVoz
 
     private let contentor: ModelContainer?
+    private let servicoPonte: ServicoPonte?
 
     init() {
         let estado = EstadoDeLancamento.ler(argumentos: ProcessInfo.processInfo.arguments)
         _rota = State(initialValue: estado.rota)
         _demonstracao = State(initialValue: estado.demonstracao)
+        _voz = StateObject(wrappedValue: GerenciadorDeVoz())
 
         let configuracao = ModelConfiguration(isStoredInMemoryOnly: estado.demonstracao)
-        contentor = try? ModelContainer(
+        let contentor = try? ModelContainer(
             for: Conversa.self,
             Mensagem.self,
             Projeto.self,
             MemoriaDoUsuario.self,
             configurations: configuracao
         )
+        self.contentor = contentor
+        self.servicoPonte = ServicoPonte.aPartirDasPreferencias()
+
+        if estado.demonstracao, let contentor {
+            let conversa = DadosDeDemonstracao.instalar(em: contentor.mainContext)
+            _conversaDeDemonstracao = State(initialValue: conversa)
+        }
 
         print("rota efetiva: \(estado.rota.id)")
         if estado.demonstracao {
@@ -39,21 +49,23 @@ struct DSHApp: App {
         WindowGroup {
             Group {
                 if let contentor {
-                    TelaInicial(
-                        rota: rota,
-                        demonstracao: demonstracao,
-                        rotaDoApp: rotaDoApp,
-                        textoCompartilhado: textoCompartilhado,
-                        conversa: conversaDeDemonstracao
-                    )
-                    .modelContainer(contentor)
-                    .task {
-                        AdaptadorDePerguntaRapida.registrar()
-                        retomarRotaPendente()
-                        if demonstracao {
-                            prepararDemonstracao(em: contentor)
+                    TelaPrincipal(conversaInicial: conversaInicial, servicoPonte: servicoPonte)
+                        .id(identidadeDaRaiz)
+                        .modelContainer(contentor)
+                        .sheet(isPresented: apresentandoArtefato) {
+                            TelaDeArtefato(artefato: DadosDeDemonstracao.artefato())
                         }
-                    }
+                        .fullScreenCover(isPresented: apresentandoVoz) {
+                            TelaDeVoz(
+                                voz: voz,
+                                enviar: { texto in enviarPelaVoz(texto) },
+                                fechar: { rota = .conversa }
+                            )
+                        }
+                        .task {
+                            AdaptadorDePerguntaRapida.registrar()
+                            retomarRotaPendente()
+                        }
                 } else {
                     Text("Não foi possível abrir o banco local do DSH.")
                         .padding()
@@ -68,90 +80,98 @@ struct DSHApp: App {
         }
     }
 
+    // MARK: - Apresentação
+
+    private var conversaInicial: Conversa? {
+        conversaCompartilhada ?? conversaDeDemonstracao
+    }
+
+    // TelaPrincipal só lê `conversaInicial` no primeiro `configurar()`; trocar a
+    // identidade força uma tela nova quando chega texto compartilhado ou de voz
+    // com o app já aberto.
+    private var identidadeDaRaiz: String {
+        conversaCompartilhada?.id.uuidString ?? "raiz"
+    }
+
+    private var apresentandoArtefato: Binding<Bool> {
+        Binding(
+            get: { rota == .artefato },
+            set: { apresentando in
+                if !apresentando { rota = .conversa }
+            }
+        )
+    }
+
+    private var apresentandoVoz: Binding<Bool> {
+        Binding(
+            get: { rota == .voz },
+            set: { apresentando in
+                if !apresentando { rota = .conversa }
+            }
+        )
+    }
+
+    // MARK: - Rotas
+
     @MainActor
     private func receberRota(_ userInfo: [AnyHashable: Any]?) {
-        if let recebida = userInfo?[TratadorDeUrl.Chave.rota] as? RotaDoApp {
-            rotaDoApp = recebida
-        }
+        guard let recebida = userInfo?[TratadorDeUrl.Chave.rota] as? RotaDoApp else { return }
         let origem = userInfo?[TratadorDeUrl.Chave.origem] as? String
-        if rotaDoApp == .novo, origem == TratadorDeUrl.origemDeCompartilhamento {
-            textoCompartilhado = ArmazemCompartilhado.consumirTextoPendente()
+
+        switch recebida {
+        case .voz:
+            rota = .voz
+        case .novo:
+            rota = .conversa
+            if origem == TratadorDeUrl.origemDeCompartilhamento {
+                abrirTextoCompartilhado()
+            }
+        default:
+            rota = .conversa
         }
     }
 
     @MainActor
     private func retomarRotaPendente() {
         guard let pendente = ArmazemCompartilhado.consumirRotaPendente() else { return }
-        rotaDoApp = pendente
-        if pendente == .novo {
-            textoCompartilhado = ArmazemCompartilhado.consumirTextoPendente()
+        switch pendente {
+        case .voz:
+            rota = .voz
+        case .novo:
+            rota = .conversa
+            abrirTextoCompartilhado()
+        default:
+            rota = .conversa
         }
     }
 
     @MainActor
-    private func prepararDemonstracao(em contentor: ModelContainer) {
-        guard conversaDeDemonstracao == nil else { return }
-        conversaDeDemonstracao = DadosDeDemonstracao.instalar(em: contentor.mainContext)
+    private func abrirTextoCompartilhado() {
+        guard let texto = ArmazemCompartilhado.consumirTextoPendente() else { return }
+        guard let conversa = criarConversa(com: texto, titulo: "Compartilhado de outro app") else { return }
+        conversaCompartilhada = conversa
+        rota = .conversa
     }
-}
 
-// Tela mínima para o build fechar sem depender de Fontes/Conversa.
-struct TelaInicial: View {
-    let rota: RotaDeLancamento
-    let demonstracao: Bool
-    let rotaDoApp: RotaDoApp
-    let textoCompartilhado: String?
-    let conversa: Conversa?
+    @MainActor
+    private func enviarPelaVoz(_ texto: String) {
+        guard let conversa = criarConversa(com: texto, titulo: "Pergunta por voz") else { return }
+        conversaCompartilhada = conversa
+        rota = .conversa
+    }
 
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    Text(rota.titulo)
-                        .font(.largeTitle.bold())
+    @MainActor
+    private func criarConversa(com texto: String, titulo: String) -> Conversa? {
+        let limpo = texto.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !limpo.isEmpty, let contentor else { return nil }
 
-                    Text("rota efetiva: \(rota.id)")
-                        .font(.footnote.monospaced())
-                        .foregroundStyle(.secondary)
-
-                    Text("rota recebida no app: \(rotaDoApp.rawValue)")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-
-                    if let textoCompartilhado, !textoCompartilhado.isEmpty {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("Texto recebido de outro app")
-                                .font(.headline)
-                            Text(textoCompartilhado)
-                                .font(.body)
-                        }
-                        .padding()
-                        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 14))
-                    }
-
-                    if demonstracao, let conversa {
-                        Text(conversa.titulo)
-                            .font(.title3.bold())
-                        ForEach(conversa.mensagensEmOrdem) { mensagem in
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(mensagem.papel == .usuario ? "Você" : "DSH")
-                                    .font(.caption.bold())
-                                    .foregroundStyle(.secondary)
-                                Text(mensagem.conteudo)
-                                    .font(.body)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                    } else {
-                        Text("Nenhuma conversa carregada. Use -demonstracao 1 para ver os dados de captura.")
-                            .font(.body)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .padding()
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .navigationTitle("DSH")
-        }
+        let contexto = contentor.mainContext
+        let conversa = Conversa(titulo: titulo)
+        let mensagem = Mensagem(papel: .usuario, conteudo: limpo, conversa: conversa)
+        conversa.mensagens = [mensagem]
+        contexto.insert(conversa)
+        contexto.insert(mensagem)
+        try? contexto.save()
+        return conversa
     }
 }

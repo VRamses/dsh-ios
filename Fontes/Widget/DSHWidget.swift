@@ -10,22 +10,23 @@ import UIKit
 // MARK: - Entrada e linha do tempo
 
 struct EntradaDoWidget: TimelineEntry {
-    let data: Date
+    // TimelineEntry exige a propriedade chamada `date`; o nome é do protocolo da Apple.
+    let date: Date
 }
 
 // A linha do tempo é estática de propósito: o widget não tem o que atualizar
 // sem dados do app, e recarregar sem motivo gasta bateria.
 struct ProvedorDoWidget: TimelineProvider {
     func placeholder(in context: Context) -> EntradaDoWidget {
-        EntradaDoWidget(data: Date())
+        EntradaDoWidget(date: Date())
     }
 
     func getSnapshot(in context: Context, completion: @escaping (EntradaDoWidget) -> Void) {
-        completion(EntradaDoWidget(data: Date()))
+        completion(EntradaDoWidget(date: Date()))
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<EntradaDoWidget>) -> Void) {
-        let entrada = EntradaDoWidget(data: Date())
+        let entrada = EntradaDoWidget(date: Date())
         completion(Timeline(entries: [entrada], policy: .never))
     }
 }

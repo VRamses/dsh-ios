@@ -18,7 +18,9 @@ enum DeepLinks {
     static var todosOsEsquemas: [String] { [esquema, alternativo] }
 
     static func rota(de url: URL) -> RotaDoApp? {
-        let candidatos = [url.host, url.path]
+        // `host` é opcional e `path` não é, então o tipo do array é declarado:
+        // sem isso o Swift tenta unificar `String?` com `Any` e não compila.
+        let candidatos: [String?] = [url.host, url.path]
         for bruto in candidatos {
             let limpo = (bruto ?? "").trimmingCharacters(in: CharacterSet(charactersIn: "/")).lowercased()
             guard !limpo.isEmpty else { continue }

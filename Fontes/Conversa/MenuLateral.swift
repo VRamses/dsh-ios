@@ -9,12 +9,12 @@ import SwiftUI
 struct MenuLateral: View {
     var conversas: [Conversa]
     var selecionada: UUID?
-    var aoSelecionar: (Conversa) -> Void
-    var aoNova: () -> Void
-    var aoFixar: (Conversa) -> Void
-    var aoApagar: (Conversa) -> Void
-    var aoAbrirSessoes: () -> Void
-    var aoFechar: () -> Void
+    var aoSelecionar: @MainActor (Conversa) -> Void
+    var aoNova: @MainActor () -> Void
+    var aoFixar: @MainActor (Conversa) -> Void
+    var aoApagar: @MainActor (Conversa) -> Void
+    var aoAbrirSessoes: @MainActor () -> Void
+    var aoFechar: @MainActor () -> Void
 
     @State private var busca = ""
     @State private var confirmando = false

@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 import SwiftData
 
 /// Estado da conversa na tela. Não cria tipo da camada de dados: fala com
@@ -251,11 +252,11 @@ final class ConversaViewModel: ObservableObject {
         guard let contexto else { return }
         let mensagem = Mensagem(
             id: UUID(),
-            papelCru: papel.rawValue,
+            papel: papel,
             conteudo: texto,
             raciocinio: raciocinio,
             criadaEm: Date(),
-            anexosCodificados: Anexo.codificar(anexos),
+            anexos: anexos,
             conversa: conversa
         )
         contexto.insert(mensagem)

@@ -56,11 +56,13 @@ struct BlocoDeCodigo: View {
         )
     }
 
+    @MainActor
     private func copiar() {
         UIPasteboard.general.string = codigo
         withAnimation(.easeInOut(duration: 0.18)) { copiado = true }
         UIAccessibility.post(notification: .announcement, argument: "Código copiado")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
             withAnimation(.easeInOut(duration: 0.18)) { copiado = false }
         }
     }

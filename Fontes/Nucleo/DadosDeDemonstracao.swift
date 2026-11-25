@@ -94,8 +94,21 @@ enum DadosDeDemonstracao {
     ```
     """
 
-    static func conversa() -> Conversa {
-        let inicio = Date().addingTimeInterval(-3600)
+    // Artefato do relógio para a rota `-rota artefato` do CI. Sai do mesmo HTML
+    // que aparece na conversa, sem as cercas de bloco de código.
+    static func artefato() -> Artefato {
+        let linhas = htmlDoRelogio.split(separator: "\n", omittingEmptySubsequences: false)
+        let codigo = linhas.dropFirst().dropLast().joined(separator: "\n")
+        return Artefato(
+            id: "demonstracao-relogio",
+            tipo: .html,
+            titulo: "Relógio de parede",
+            linguagem: "html",
+            codigo: codigo
+        )
+    }
+
+    static func conversa() -> Conversa {        let inicio = Date().addingTimeInterval(-3600)
         let conversa = Conversa(
             titulo: "Relógio de parede em HTML",
             criadaEm: inicio,

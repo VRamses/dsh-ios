@@ -9,7 +9,7 @@ import SwiftUI
 /// de fingir lista vazia.
 struct TelaSessoesDsh: View {
     @ObservedObject var modelo: ConversaViewModel
-    var aoAbrir: (SessaoResumo) -> Void
+    var aoAbrir: @MainActor (SessaoResumo) -> Void
 
     @Environment(\.dismiss) private var fechar
 

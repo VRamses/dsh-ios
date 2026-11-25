@@ -63,7 +63,6 @@ struct BolhaDeMensagem: View {
             .background(Cores.acentoSuave)
             .clipShape(RoundedRectangle(cornerRadius: Raio.l, style: .continuous))
             .accessibilityElement(children: .combine)
-            .accessibilityLabel("Você escreveu")
         }
     }
 

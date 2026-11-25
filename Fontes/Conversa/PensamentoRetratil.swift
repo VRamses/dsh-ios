@@ -140,6 +140,7 @@ struct PensamentoRetratil: View {
         return "\(minutos) min \(resto) s"
     }
 
+    @MainActor
     private func pulsar() {
         guard estaAoVivo, !reduzirMovimento else {
             pulsando = false
