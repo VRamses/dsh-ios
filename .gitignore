@@ -1,0 +1,17 @@
+# Build e artefatos
+build/
+DerivedData/
+*.ipa
+*.dSYM
+*.xcarchive
+*.xcuserstate
+project.xcworkspace/xcuserdata/
+xcuserdata/
+.DS_Store
+
+# XcodeGen gera o projeto a partir do project.yml
+DSH.xcodeproj/
+
+# Sessões de simulador e logs locais
+build/simulador/
+build/logs/
