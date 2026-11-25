@@ -174,6 +174,30 @@ Duas coisas que esta instalação ensinou:
   "Apple ID Authentication" pedindo a senha normal da conta, e recusa senha de app. Depois do
   login, a assinatura consumiu 3 App IDs dos 7 que estavam livres, e o contador ficou em 4.
 
+### A terceira instalação, no SUPERCOLLIDER, em 25/11/2026
+
+Esta é a instalação que levou ao aparelho o build da gaveta de largura toda, do botão
+"Testar a chave" e do pareamento por QR.
+
+| o que | como foi medido | resultado |
+|---|---|---|
+| rodada do CI | `gh run view 45659433505`, commit `b807bb3` | `success` nos dois jobs, 23 passos executados |
+| pacote instalado | baixar o artefato `ipa` da rodada | `DSH-livre.ipa` com 781.831 bytes e sha256 `9F364737941004BF4C267E6402A594073625C915888BD123C7120FB1A3513BC7` |
+| raiz e conteúdo do pacote | listar as entradas do `.ipa` com `zipfile` | 15 entradas, a primeira é `Payload/`, nenhuma com `PlugIns` |
+| binário | `Payload/DSH.app/DSH` dentro do pacote | 3.181.480 bytes, com as strings `Testar a chave`, `pareamento/trocar`, `token salvo no cofre` e `Não consegui trocar o código` presentes |
+
+Duas coisas que esta instalação ensinou:
+
+- Build que morre em segundos, com zero passos, sem log e sem nome de runner não é erro de
+  código: é conta sem minutos de Actions. O `dsh-ios` era privado no plano free, e cada minuto
+  de macOS consome dez da cota mensal de 2.000; o mês passou disso em 25/11/2026 e o Actions
+  recusou alocar runner em sete rodadas seguidas, inclusive numa rodada de prova que só rodava
+  `sw_vers`. O repositório virou público no mesmo dia, porque repositório público não consome
+  cota, e a rodada seguinte ficou verde em 9 minutos e 46 segundos.
+- O pareamento por QR não carrega token: o QR leva `dsh://ajustes?parear=<código>&endereco=<url>`,
+  o app troca o código de oito caracteres pelo token em `POST /v1/pareamento/trocar`, e o código
+  vale uma vez só, por cinco minutos.
+
 Caminho B, AltStore (para quem quer renovação automática):
 
 1. Instale o iTunes pelo site da Apple (o da Microsoft Store não serve) e o AltServer no PC.
@@ -207,7 +231,10 @@ do app, porque isso é link, não dado compartilhado.
 | Sideloadly recusa o arquivo ou o app fecha na abertura com conta gratuita | foi instalado o `DSH.ipa` completo, que tem extensão e App Group | instalar o `DSH-livre.ipa`, que sai na mesma rodada |
 | Sideloadly para em 0% com `Can't listdir a file` | o zip do IPA não tem `Payload/` como pasta raiz | gerar o pacote pelo workflow atual, que confere a raiz |
 | "Importar chaves do computador" responde que o computador não tem as chaves | o cofre do PC não tem aquele nome, ou a ponte está com a escrita desligada | conferir o cofre da máquina e o `permitirEscrita` do `ponte.json` |
-| erro de rede no motor da ponte | Tailscale fora, notebook desligado, endereço sem `https://` | conferir o tailnet e o endereço salvo nos Ajustes |
+| erro de rede no motor da ponte | Tailscale fora, computador desligado, endereço sem `https://` | conferir o tailnet e o endereço salvo nos Ajustes |
+| a conversa não responde nada e não aparece faixa de erro | a chave não chegou ao cofre, ou chegou uma resposta 200 sem texto | abrir Ajustes e tocar em "Testar a chave", que mostra o código HTTP e o começo do corpo |
+| a câmera lê o QR mas o app não abre os Ajustes | link sem o esquema `dsh://`, ou app instalado sem o `CFBundleURLSchemes` deste build | conferir se o QR começa com `dsh://ajustes?parear=` e instalar o build de 25/11/2026 ou mais novo |
+| o QR dá código inválido | o código vale uma vez só, por cinco minutos, e o pareamento anterior já o consumiu | gerar outro QR no computador: `node _tmp\ponte\qr-pareamento.mjs` |
 | motor direto responde 401 | chave da API errada ou revogada | colar a chave de novo em Ajustes |
 | widget abre mas não mostra conversa | App Group indisponível na conta gratuita | comportamento esperado, ver item 4 |
 | captura de tela em branco no artefato | a rota não existe ou o app não chegou a abrir | ler o `console.txt` e o log de compilação |
@@ -222,6 +249,12 @@ do app, porque isso é link, não dado compartilhado.
 - `Fontes/`: o código, separado por assunto (App, Nucleo, Provedores, Compartilhado, Desenho,
   Conversa, Artefatos, Ajustes, Voz, Ferramentas, Plataforma, Widget, Extensao).
 - `Recursos/`: os três `Info.plist`, os três `.entitlements` e o catálogo `Assets.xcassets`.
+- Visibilidade: o repositório é **público** desde 25/11/2026. Era privado, e a cota mensal de
+  2.000 minutos do plano free acabou no meio dos builds de macOS, que contam dez vezes; com o
+  repositório público o Actions não consome cota. Antes de tornar público, o histórico inteiro
+  (27 commits) foi varrido por `sk-`, `ghp_`, `AKIA`, chave privada e `Bearer` com 20 caracteres
+  ou mais, e não há segredo vivo em nenhum deles. O que o repositório expõe são nomes de máquina
+  do tailnet, que só respondem para quem está na tailnet.
 
 ## 8. O ícone do app
 
@@ -262,11 +295,13 @@ Duas consequências práticas:
 2. O Tailscale precisa estar ativo **no iPhone e no computador**, na mesma tailnet. Sem isso o
    endereço não resolve, e é esse o erro que aparece na conversa.
 
-## 10. O que a última rodada do CI prova
+## 10. O que a rodada do CI prova
 
 A rodada `45554933068` rodou sobre o commit `6b2803e` e terminou com os dois jobs em `success`,
-passo por passo. Os números abaixo saíram do artefato baixado e aberto aqui, não do log do
-Actions.
+passo por passo. É a rodada que produziu as capturas e as medidas de pacote abaixo. A rodada mais
+nova, `45659433505` sobre `b807bb3`, também fechou verde nos dois jobs, com 23 passos, e é a que
+está instalada no aparelho. Os números abaixo saíram do artefato baixado e aberto aqui, não do log
+do Actions.
 
 | o que | como foi medido | resultado |
 |---|---|---|
@@ -326,14 +361,15 @@ cada um é uma promessa que o app ainda não cumpre.
 
 | o que | estado | por que não foi feito |
 |---|---|---|
-| validar a chave da DeepSeek em Ajustes | só confere o prefixo `sk-` | a API não tem rota de validação de chave, e inventar uma custaria uma chamada paga a cada toque |
+| validar a chave da DeepSeek em Ajustes | passou a existir em 25/11/2026: o botão "Testar a chave" faz uma chamada real, com `max_tokens: 16`, e mostra o código HTTP e o começo do corpo | antes só conferia o prefixo `sk-`; o custo agora é de 16 tokens por toque, e é o usuário quem decide tocar |
 | bloco de código muito longo | cresce sem limite dentro da bolha | cortar com "mostrar mais" mexe no `TextoRico`, e a conversa de demonstração já usa o limite como prova de rolagem |
 | primeiro quadro da resposta ao vivo | o recuo pendente aparece a partir do segundo quadro | o streaming chega em pedaços e o primeiro é renderizado antes de haver linha completa |
 | criar sessão pela ponte | `POST /v1/sessoes` e `/mensagem` foram verificados só por leitura de código | a rodada do CI não tem tailnet, então não há como exercitar a ponte de dentro do simulador |
 | folha do artefato durante a resposta | pode fechar sozinha quando o texto ao vivo vira mensagem gravada | a bolha ao vivo é substituída no fim do stream, e com ela o estado que segurava a folha |
 | widget e compartilhamento no iPhone | exigem conta paga do programa de desenvolvedor | os dois alvos usam App Group, que a conta gratuita não libera; com conta gratuita, o pacote que instala é o `DSH-livre.ipa`, sem as extensões |
 | remover anexo no transcrito | a bolha desenha o cartão sem a ação de remover | anexo já enviado não sai da conversa, e o parâmetro `aoRemover` do cartão fica reservado à barra de entrada, que ainda usa as etiquetas dela |
-| instalação em iPhone físico | reinstalada em 25/11/2026 às 09:43 pelo Sideloadly com conta gratuita, agora com o build que tem o botão de importar chaves, e o app conversa com o DSH pela ponte | a assinatura vence em 02/12/2026; renovar exige o Sideloadly com o PC e o iPhone na mesma rede |
+| instalação em iPhone físico | reinstalada em 25/11/2026 pelo Sideloadly com conta gratuita, com o build da gaveta, do teste de chave e do QR | a assinatura vence em 7 dias; renovar exige o Sideloadly com o PC e o iPhone na mesma rede |
+| pareamento por QR exercitado no aparelho | o caminho está provado no servidor (`POST /v1/pareamento` e `/v1/pareamento/trocar`, com código de uso único) e o app compila com ele | falta ler um QR com a câmera do iPhone e ver o token cair no cofre; é o teste seguinte |
 | importar a chave de busca web | o cofre do PC não tem `TAVILY_API_KEY` nem `BRAVE_API_KEY` | criar uma chave gratuita na Tavily, gravar no cofre do PC e usar o botão de importar, ou colar direto em Ajustes |
 
 
