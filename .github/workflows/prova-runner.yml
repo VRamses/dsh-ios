@@ -1,0 +1,24 @@
+name: Prova do runner
+
+# Workflow minimo, so para provar se este repositorio consegue um runner de macOS
+# nesta conta. Nasceu em 25/11/2026, depois de seis rodadas do iOS falharem em
+# segundos com zero passos executados, sem log e sem runner atribuido, o que nao
+# e erro de codigo. Custa um minuto de runner e responde sim ou nao.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  prova:
+    name: Prova do runner
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - name: Sistema
+        run: |
+          sw_vers
+          uname -m
+          xcodebuild -version || true
