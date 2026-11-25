@@ -166,13 +166,15 @@ Duas consequências práticas:
 
 ## 10. O que a última rodada do CI prova
 
-A rodada `45550638510` rodou sobre o commit `720aa4e` e terminou com os dois jobs em `success`.
-Os números abaixo saíram do artefato baixado e aberto aqui, não do log do Actions.
+A rodada `45552109815` rodou sobre o commit `5f28a33` e terminou com os dois jobs em `success`,
+passo por passo. Os números abaixo saíram do artefato baixado e aberto aqui, não do log do
+Actions.
 
 | o que | como foi medido | resultado |
 |---|---|---|
 | job `simulador` | compilar, instalar no iPhone 16 do simulador e capturar as cinco rotas | `success`, 5 capturas de 1206x2622 |
-| job `ipa` | empacotar sem assinatura | `success`, `DSH.ipa` com 815.792 bytes |
+| widget e extensão de compartilhar | passo próprio, `xcodebuild -target DSHWidget` e `-target DSHCompartilhar` | `success`, os dois alvos compilam; antes desta rodada eles não eram compilados por ninguém |
+| job `ipa` | compilar para aparelho sem assinatura e empacotar | `success`, `DSH.ipa` com 815.850 bytes |
 | binário | `Payload/DSH.app/DSH` dentro do IPA | 3.084.832 bytes |
 | catálogo de ícones | `Payload/DSH.app/Assets.car` | 32.735 bytes, ou seja, o catálogo compilou e não saiu vazio |
 | ícones derivados | PNGs dentro do pacote | `AppIcon60x60@2x.png` com 2.861 bytes e `AppIcon76x76@2x~ipad.png` com 3.500 bytes |
@@ -183,11 +185,11 @@ O que cada captura mostra, com o tamanho do arquivo:
 
 | captura | bytes | o que está na tela |
 |---|---|---|
-| `conversa.png` | 293.082 | o fim de uma resposta, com o bloco de código e dois cartões de artefato: "Relógio de parede" (HTML) e "Relógio em SVG" (SVG) |
-| `artefato.png` | 666.946 | o visualizador do artefato HTML rodando o relógio dentro do `WKWebView`, com o ponteiro na hora do relógio do simulador, e o seletor entre Visualização e Código |
-| `ajustes.png` | 304.975 | a folha de Ajustes, com o seletor de motor, o cofre da DeepSeek, o endereço e o token da ponte, e as ações de salvar e apagar |
-| `dsh.png` | 155.336 | a folha de sessões aberta pela rota `dsh`, no estado sem ponte configurada, que é o estado de fábrica do simulador |
-| `voz.png` | 750.658 | a tela de voz com o botão de gravação |
+| `conversa.png` | 292.523 | o fim de uma resposta, com o bloco de código e dois cartões de artefato: "Relógio de parede" (HTML) e "Relógio em SVG" (SVG) |
+| `artefato.png` | 662.544 | o visualizador do artefato HTML rodando o relógio dentro do `WKWebView`, com o ponteiro na hora do relógio do simulador, e o seletor entre Visualização e Código |
+| `ajustes.png` | 303.843 | a folha de Ajustes, com o seletor de motor, o cofre da DeepSeek, o endereço e o token da ponte, e as ações de salvar e apagar |
+| `dsh.png` | 154.230 | a folha de sessões aberta pela rota `dsh`, no estado sem ponte configurada, que é o estado de fábrica do simulador |
+| `voz.png` | 750.103 | a tela de voz com o botão de gravação |
 
 As cinco capturas estão versionadas em `docs/capturas/`, tiradas desta rodada, para não
 depender de baixar artefato do Actions para olhar a tela:
@@ -207,6 +209,8 @@ O que a rodada **não** prova, para não dar a ela mais peso do que tem:
   leitura de código;
 - a voz capturada é a tela, não o resultado de um reconhecimento: o microfone do simulador é
   permissão dada pelo `simctl`, sem áudio real;
+- o widget e a extensão de compartilhar compilam, mas não são executados: o simulador roda só o
+  app principal, e o App Group que liga os três exige conta paga do programa de desenvolvedor;
 - as capturas são do modo claro do simulador; o modo escuro não é fotografado.
 
 ## 11. O que fica aberto
