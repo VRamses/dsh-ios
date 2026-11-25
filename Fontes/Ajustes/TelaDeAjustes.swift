@@ -83,6 +83,7 @@ struct TelaDeAjustes: View {
             .accessibilityHint("Escolhe entre a ponte do DSH no computador e a API da DeepSeek.")
 
             textoDeApoio("Pela ponte, a conversa usa as sessões do DSH no computador e ganha as ferramentas de MCP (Droz, Miro, Jira, Zendesk). No DeepSeek direto só existem as ferramentas locais: busca web, agenda e lembretes.")
+            textoDeApoio("A ponte só entra em uso depois de escolher uma sessão em Sessões do DSH, no menu. Sem sessão escolhida, o app responde pela DeepSeek direta mesmo com a ponte marcada aqui.")
         } header: {
             cabecalho("Motor")
         }
@@ -516,6 +517,14 @@ struct TelaDeAjustes: View {
         .accessibilityElement(children: .combine)
     }
 
+    /// Os dois verbos do cofre, como ação de linha e não como botão cheio.
+    ///
+    /// A primeira versão desenhava pílula com `Cores.superficieElevada` por
+    /// dentro, e no tema claro ela é branca: a pílula sumia dentro do cartão
+    /// branco e sobrava texto solto no meio do nada. Texto tingido é o que o
+    /// iOS usa para ação de linha em ajustes ("Redefinir", "Apagar"), e o
+    /// contraste do acento (5,9:1) e do perigo (6,0:1) no claro segue acima de
+    /// AA. A altura de 44 pontos e o `contentShape` mantêm o alvo de toque.
     private func linhaDeBotoes(
         salvar: String,
         apagar: String,
@@ -523,15 +532,12 @@ struct TelaDeAjustes: View {
         aoSalvar: @escaping @MainActor () -> Void,
         aoApagar: @escaping @MainActor () -> Void
     ) -> some View {
-        HStack(spacing: Espaco.s) {
+        HStack(spacing: Espaco.xl) {
             Button(action: { aoSalvar() }) {
                 Text(salvar)
-                    .font(Tipografia.rotulo())
-                    .foregroundStyle(Cores.texto)
-                    .padding(.horizontal, Espaco.m)
+                    .font(Tipografia.corpo())
+                    .foregroundStyle(Cores.acento)
                     .frame(minHeight: 44)
-                    .background(Cores.superficieElevada)
-                    .clipShape(RoundedRectangle(cornerRadius: Raio.s, style: .continuous))
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -539,17 +545,14 @@ struct TelaDeAjustes: View {
 
             Button(action: { aoApagar() }) {
                 Text(apagar)
-                    .font(Tipografia.rotulo())
+                    .font(Tipografia.corpo())
                     .foregroundStyle(Cores.perigo)
-                    .padding(.horizontal, Espaco.m)
                     .frame(minHeight: 44)
-                    .background(Cores.superficieElevada)
-                    .clipShape(RoundedRectangle(cornerRadius: Raio.s, style: .continuous))
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .disabled(!apagarHabilitado)
-            .opacity(apagarHabilitado ? 1 : 0.4)
+            .opacity(apagarHabilitado ? 1 : 0.45)
             .accessibilityLabel("\(apagar) do cofre")
 
             Spacer(minLength: 0)

@@ -97,23 +97,20 @@ enum DadosDeDemonstracao {
     """
 
     // Versão vetorial curta do mesmo relógio. Serve à captura da conversa: o
-    // cartão de artefato fica visível no quadro porque o documento tem 18 linhas,
-    // e o título vem da tag <title>, que é o que o detector lê primeiro.
+    // cartão de artefato precisa cair dentro do quadro, e o bloco de código do
+    // HTML, com cem linhas, nunca cai. Por isso este documento tem 9 linhas de
+    // menos de 47 colunas, o que não quebra linha na largura do bloco, e o
+    // título vem da tag <title>, que é o que o detector lê primeiro.
     static let svgDoRelogio = """
     ```svg
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+    <svg xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 100 100" width="100">
       <title>Relógio em SVG</title>
-      <circle cx="100" cy="100" r="92" fill="#101216" stroke="#2b3040" stroke-width="4"/>
-      <g stroke="#4b5468" stroke-width="3" stroke-linecap="round">
-        <line x1="100" y1="22" x2="100" y2="34"/>
-        <line x1="100" y1="166" x2="100" y2="178"/>
-        <line x1="22" y1="100" x2="34" y2="100"/>
-        <line x1="166" y1="100" x2="178" y2="100"/>
-      </g>
-      <line x1="100" y1="100" x2="100" y2="56" stroke="#e8ecf4" stroke-width="7" stroke-linecap="round"/>
-      <line x1="100" y1="100" x2="134" y2="118" stroke="#a9b4c8" stroke-width="5" stroke-linecap="round"/>
-      <line x1="100" y1="100" x2="78" y2="140" stroke="#e2564a" stroke-width="2" stroke-linecap="round"/>
-      <circle cx="100" cy="100" r="5" fill="#e3a33c"/>
+      <circle cx="50" cy="50" r="44" fill="#0E1013"
+        stroke="#e3a33c" stroke-width="6"/>
+      <line x1="50" y1="50" x2="50" y2="24"
+        stroke="#e8ecf4" stroke-width="6"
+        stroke-linecap="round"/>
     </svg>
     ```
     """

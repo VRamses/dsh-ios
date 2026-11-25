@@ -314,18 +314,21 @@ struct TelaPrincipal: View {
         if !configurou {
             conversaAtual = conversaInicial
             modeloEscolhido = preferencias.modelo
-            // A ponte só vale com uma sessão escolhida nesta execução: guardar
-            // só o "usa ponte" faria a tela prometer um caminho que não existe.
-            usandoPonte = false
             configurou = true
         }
+        // A intenção do motor vem de Ajustes (`Preferencias.usaPonte`), e a ponte
+        // só pode responder com uma sessão escolhida nesta execução: ficar só
+        // com o estado local faria o seletor de Ajustes mentir, e ficar só com a
+        // sessão faria a escolha do usuário ser ignorada. As duas coisas juntas
+        // é que valem, e é isso que o selo da conversa mostra.
+        usandoPonte = preferencias.usaPonte && sessaoEscolhida != nil
         modelo.preparar(conversa: conversaEfetiva, contexto: contexto, ponte: ponteAtual)
         modelo.definirSessao(sessaoEscolhida)
         modelo.configurar(
             modelo: modeloEscolhido,
             temperatura: preferencias.temperatura,
             maxTokens: preferencias.maxTokens,
-            usaPonte: usandoPonte && sessaoEscolhida != nil
+            usaPonte: usandoPonte
         )
         // A rota `-rota dsh` do CI reaproveita o mesmo caminho do botão "Sessões
         // do DSH": abre a folha pelo estado que o menu já usa, e só depois de a
