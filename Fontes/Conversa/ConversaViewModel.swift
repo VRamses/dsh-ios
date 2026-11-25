@@ -29,6 +29,7 @@ final class ConversaViewModel: ObservableObject {
     private var ponte: ServicoPonte?
     private var tarefa: Task<Void, Never>?
     private var provedorDoEnvio: (any ProvedorDeConversa)?
+    private var executorDeFerramentas: FerramentasDoModelo?
 
     private var modelo = "deepseek-chat"
     private var temperatura = 1.0
@@ -125,26 +126,56 @@ final class ConversaViewModel: ObservableObject {
         }
 
         provedorDoEnvio = provedor
-        let pedido = montarPedido(de: conversa)
 
         var resposta = ""
         var pensamento = ""
+        // O que só existe nesta resposta: o texto da volta que pediu ferramenta e o
+        // resultado de cada ferramenta. Vai como mensagem extra no pedido seguinte,
+        // sem entrar no histórico salvo, porque isso não é fala de ninguém.
+        var extras: [MensagemDoPedido] = []
+        var voltas = 0
+
         do {
-            for try await fragmento in provedor.responder(pedido) {
-                if Task.isCancelled { break }
-                switch fragmento {
-                case .raciocinio(let pedaco):
-                    pensamento += pedaco
-                    raciocinioAoVivo = pensamento
-                case .texto(let pedaco):
-                    resposta += pedaco
-                    textoAoVivo = resposta
-                case .chamadaDeFerramenta:
-                    continue
-                case .uso:
-                    continue
-                case .fim:
-                    continue
+            while true {
+                voltas += 1
+                let pedido = montarPedido(de: conversa, acrescentando: extras)
+                var chamadas: [ChamadaDeFerramenta] = []
+                var textoDaVolta = ""
+
+                for try await fragmento in provedor.responder(pedido) {
+                    if Task.isCancelled { break }
+                    switch fragmento {
+                    case .raciocinio(let pedaco):
+                        pensamento += pedaco
+                        raciocinioAoVivo = pensamento
+                    case .texto(let pedaco):
+                        textoDaVolta += pedaco
+                        resposta += pedaco
+                        textoAoVivo = resposta
+                    case .chamadaDeFerramenta(let chamada):
+                        chamadas.append(chamada)
+                    case .uso(_, _), .fim(_):
+                        continue
+                    }
+                }
+
+                if Task.isCancelled || chamadas.isEmpty || voltas >= 3 {
+                    break
+                }
+
+                let nomes = chamadas.map(\.nome).joined(separator: ", ")
+                pensamento += (pensamento.isEmpty ? "" : "\n\n") + "Usei a ferramenta \(nomes)."
+                raciocinioAoVivo = pensamento
+
+                if !textoDaVolta.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    extras.append(MensagemDoPedido(papel: .assistente, texto: textoDaVolta))
+                }
+                for chamada in chamadas {
+                    let resultado = await executarFerramenta(chamada)
+                    extras.append(MensagemDoPedido(
+                        papel: .usuario,
+                        texto: "[resultado da ferramenta \(chamada.nome)]\n\(resultado)"
+                    ))
                 }
             }
         } catch is CancellationError {
@@ -172,20 +203,50 @@ final class ConversaViewModel: ObservableObject {
 
     // MARK: - Montagem do pedido
 
-    private func montarPedido(de conversa: Conversa) -> PedidoDeConversa {
+    /// Monta o pedido a partir do que está salvo, mais o que só vale nesta resposta
+    /// (texto intermediário e resultado de ferramenta). As definições de ferramenta
+    /// vão sempre, para o modelo poder pedir busca ou agenda quando precisar.
+    @MainActor
+    private func montarPedido(
+        de conversa: Conversa,
+        acrescentando extras: [MensagemDoPedido] = []
+    ) -> PedidoDeConversa {
         let historico = conversa.mensagens
             .sorted { $0.criadaEm < $1.criadaEm }
             .filter { $0.papel != .sistema }
-        let mensagens = historico.map { mensagem in
+        var mensagens = historico.map { mensagem in
             MensagemDoPedido(papel: mensagem.papel, texto: mensagem.conteudo, anexos: mensagem.anexos)
         }
+        mensagens.append(contentsOf: extras)
         return PedidoDeConversa(
             mensagens: mensagens,
             promptDeSistema: conversa.promptDeSistema,
             temperatura: temperatura,
             maxTokens: maxTokens,
-            ferramentas: []
+            ferramentas: ferramentasDoApp().definicoes()
         )
+    }
+
+    /// O executor é um só por tela: ele guarda o `EKEventStore` e seria desperdício
+    /// criar um por mensagem. Nascido dentro de método principal, porque a classe é
+    /// `@MainActor` e o inicializador dela não pode rodar fora da tela.
+    @MainActor
+    private func ferramentasDoApp() -> FerramentasDoModelo {
+        if let executorDeFerramentas { return executorDeFerramentas }
+        let novo = FerramentasDoModelo()
+        executorDeFerramentas = novo
+        return novo
+    }
+
+    /// Roda a ferramenta e devolve sempre texto: falha vira resultado com motivo em
+    /// português, porque derrubar a conversa por causa de uma busca não ajuda ninguém.
+    @MainActor
+    private func executarFerramenta(_ chamada: ChamadaDeFerramenta) async -> String {
+        do {
+            return try await ferramentasDoApp().executar(chamada)
+        } catch {
+            return "Não deu para usar a ferramenta \(chamada.nome): \(error.localizedDescription)"
+        }
     }
 
     /// Quem responde: a sessão do DSH pela ponte ou a API da DeepSeek com a

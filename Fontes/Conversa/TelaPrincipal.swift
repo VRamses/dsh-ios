@@ -372,6 +372,7 @@ struct TelaPrincipal: View {
         withAnimation(.easeOut(duration: 0.2)) { menuAberto = false }
     }
 
+    @MainActor
     private func rolar(_ rolagem: ScrollViewProxy, animado: Bool = true) {
         if animado {
             withAnimation(.easeOut(duration: 0.25)) {

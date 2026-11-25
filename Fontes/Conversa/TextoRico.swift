@@ -17,8 +17,8 @@ struct TextoRico: View {
     var body: some View {
         let blocos = TextoRico.blocos(de: texto)
         VStack(alignment: .leading, spacing: Espaco.m) {
-            ForEach(Array(blocos.enumerated()), id: \.offset) { par in
-                vista(de: par.element)
+            ForEach(blocos.indices, id: \.self) { indice in
+                vista(de: blocos[indice])
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -40,7 +40,7 @@ struct TextoRico: View {
         case .titulo(let conteudo, let nivel):
             base(conteudo)
                 .font(nivel <= 2 ? Tipografia.titulo(20) : Tipografia.corpo())
-                .fontWeight(nivel <= 2 ? .semibold : .semibold)
+                .fontWeight(.semibold)
                 .foregroundStyle(Cores.texto)
                 .padding(.top, Espaco.xs)
 
