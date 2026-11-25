@@ -151,6 +151,29 @@ Duas coisas que a primeira instalação ensinou, e que valem para a próxima:
 - Para carregar o IPA na janela do Sideloadly, o caminho que funciona é passar o arquivo como
   argumento na linha de comando. Arrastar, colar com `Ctrl+V` e clicar no ícone não carregaram.
 
+### A segunda instalação, no SUPERCOLLIDER, em 25/11/2026
+
+Esta é a instalação que levou ao aparelho o build com o botão "Importar chaves do computador".
+Os números abaixo foram medidos na máquina que fez o serviço, o SUPERCOLLIDER, e não no notebook.
+
+| o que | como foi medido | resultado |
+|---|---|---|
+| pacote instalado | baixar o artefato `ipa` da rodada `45608662574` (commit `e71b7b8`) | `DSH-livre.ipa` com 774.574 bytes e sha256 `BCFF9158718BDF4E7DE0ED4E975B87DD34B427B6DDC50F154F1BEE081E92AE51` |
+| raiz e conteúdo do pacote | listar as entradas do `.ipa` antes de instalar | 15 entradas, a primeira é `Payload/`, e nenhuma tem `PlugIns` |
+| botão novo dentro do binário | procurar as strings `Importar chaves` e `importarChaves` no `Payload/DSH.app/DSH` | presentes, então não é o pacote anterior |
+| assinatura e instalação | Sideloadly v0.72 em `%LOCALAPPDATA%\Sideloadly\sideloadly.exe`, IPA passado por argumento | `Done.` em 100% às 09:43 |
+| registro da instalação | tabela `installations` do `installations.db` do Sideloadly | linha nova com `final_bundle_id` `dev.ramses.dsh.AWX55ZH3FU`, `known_ttl` 7 e `refresh_at_hours` 96, `last_error` vazio e `failures_count` 0 |
+| aparelho | usbmuxd na porta 27015 e a lista do Sideloadly | iPhone `00008140-001A71A10189801C`, iOS 27.3, por USB |
+
+Duas coisas que esta instalação ensinou:
+
+- A atualização é no lugar, não uma segunda cópia: o aparelho já tinha `dev.ramses.dsh.AWX55ZH3FU`
+  da mesma conta, então o Sideloadly assinou de novo com o mesmo identificador e o cofre do
+  iPhone (a chave da DeepSeek e o token da ponte) sobreviveu.
+- A sessão da conta Apple salva no Sideloadly tinha 6 dias e não serviu: ele abriu a janela
+  "Apple ID Authentication" pedindo a senha normal da conta, e recusa senha de app. Depois do
+  login, a assinatura consumiu 3 App IDs dos 7 que estavam livres, e o contador ficou em 4.
+
 Caminho B, AltStore (para quem quer renovação automática):
 
 1. Instale o iTunes pelo site da Apple (o da Microsoft Store não serve) e o AltServer no PC.
@@ -310,7 +333,7 @@ cada um é uma promessa que o app ainda não cumpre.
 | folha do artefato durante a resposta | pode fechar sozinha quando o texto ao vivo vira mensagem gravada | a bolha ao vivo é substituída no fim do stream, e com ela o estado que segurava a folha |
 | widget e compartilhamento no iPhone | exigem conta paga do programa de desenvolvedor | os dois alvos usam App Group, que a conta gratuita não libera; com conta gratuita, o pacote que instala é o `DSH-livre.ipa`, sem as extensões |
 | remover anexo no transcrito | a bolha desenha o cartão sem a ação de remover | anexo já enviado não sai da conversa, e o parâmetro `aoRemover` do cartão fica reservado à barra de entrada, que ainda usa as etiquetas dela |
-| instalação em iPhone físico | instalada em 25/11/2026 pelo Sideloadly com conta gratuita, e o app conversa com o DSH pela ponte | a assinatura vence em 7 dias; renovar exige o Sideloadly com o PC e o iPhone na mesma rede |
+| instalação em iPhone físico | reinstalada em 25/11/2026 às 09:43 pelo Sideloadly com conta gratuita, agora com o build que tem o botão de importar chaves, e o app conversa com o DSH pela ponte | a assinatura vence em 02/12/2026; renovar exige o Sideloadly com o PC e o iPhone na mesma rede |
 | importar a chave de busca web | o cofre do PC não tem `TAVILY_API_KEY` nem `BRAVE_API_KEY` | criar uma chave gratuita na Tavily, gravar no cofre do PC e usar o botão de importar, ou colar direto em Ajustes |
 
 
