@@ -18,6 +18,7 @@ enum ErroDoCofre: LocalizedError {
 enum ChaveDoCofre {
     static let apiKeyDeepSeek = "deepseek.apiKey"
     static let tokenDaPonte = "ponte.token"
+    static let chaveBuscaWeb = "busca.apiKey"
 }
 
 enum CofreDeChaves {

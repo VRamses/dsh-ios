@@ -79,7 +79,7 @@ final class ServicoPonte: ProvedorDeConversa {
     static func aPartirDasPreferencias() -> ServicoPonte? {
         let preferencias = Preferencias.compartilhada
         guard !preferencias.enderecoDaPonte.isEmpty else { return nil }
-        guard let token = try? CofreDeChaves.ler(ChaveDoCofre.tokenDaPonte), let token, !token.isEmpty else {
+        guard let token = try? CofreDeChaves.ler(ChaveDoCofre.tokenDaPonte), !token.isEmpty else {
             return nil
         }
         return ServicoPonte(endereco: preferencias.enderecoDaPonte, token: token)
@@ -331,8 +331,11 @@ final class ServicoPonte: ProvedorDeConversa {
         var registros: [Registro] = []
         var erro: String?
         var sessao: String?
-        let objeto = (quadro.dados.data(using: .utf8))
-            .flatMap { try? JSONSerialization.jsonObject(with: $0) } as? [String: Any]
+        var objeto: [String: Any]?
+        if let dados = quadro.dados.data(using: .utf8),
+           let raiz = try? JSONSerialization.jsonObject(with: dados) {
+            objeto = raiz as? [String: Any]
+        }
         if let objeto {
             erro = objeto["erro"] as? String
             sessao = (objeto["sessao"] as? String) ?? (objeto["sessionId"] as? String)

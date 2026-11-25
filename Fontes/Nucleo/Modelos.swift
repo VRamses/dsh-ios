@@ -127,43 +127,34 @@ final class Projeto {
     var id: UUID
     var nome: String
     var instrucoes: String
-    var criadoEm: Date
-    var arquivado: Bool
+    var documentosCodificados: Data
 
     init(
         id: UUID = UUID(),
         nome: String,
         instrucoes: String = "",
-        criadoEm: Date = Date(),
-        arquivado: Bool = false
+        documentosCodificados: Data = Data("[]".utf8)
     ) {
         self.id = id
         self.nome = nome
         self.instrucoes = instrucoes
-        self.criadoEm = criadoEm
-        self.arquivado = arquivado
+        self.documentosCodificados = documentosCodificados
     }
 }
 
 @Model
 final class MemoriaDoUsuario {
     var id: UUID
-    var chave: String
-    var valor: String
+    var fato: String
     var criadaEm: Date
-    var atualizadaEm: Date
 
     init(
         id: UUID = UUID(),
-        chave: String,
-        valor: String,
-        criadaEm: Date = Date(),
-        atualizadaEm: Date = Date()
+        fato: String,
+        criadaEm: Date = Date()
     ) {
         self.id = id
-        self.chave = chave
-        self.valor = valor
+        self.fato = fato
         self.criadaEm = criadaEm
-        self.atualizadaEm = atualizadaEm
     }
 }

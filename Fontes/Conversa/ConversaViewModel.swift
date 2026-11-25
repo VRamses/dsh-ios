@@ -68,6 +68,11 @@ final class ConversaViewModel: ObservableObject {
         erro = nil
     }
 
+    @MainActor
+    func limparErro() {
+        erro = nil
+    }
+
     var temPonte: Bool { ponte != nil }
 
     // MARK: - Envio
@@ -184,16 +189,6 @@ final class ConversaViewModel: ObservableObject {
 
     /// Quem responde: a sessão do DSH pela ponte ou a API da DeepSeek com a
     /// chave do cofre. Sem um dos dois, devolve `nil` e a tela diz o que falta.
-    private var provedorAtual: (any ProvedorDeConversa)? {
-        if usaPonte, let ponte {
-            if let sessaoDaPonte {
-                ponte.definirSessao(sessaoDaPonte)
-            }
-            return ponte
-        }
-        return nil
-    }
-
     private func montarProvedor() -> (any ProvedorDeConversa)? {
         if usaPonte {
             guard let ponte else { return nil }
@@ -230,8 +225,9 @@ final class ConversaViewModel: ObservableObject {
 
     // MARK: - SwiftData
 
+    @discardableResult
     @MainActor
-    private func criarConversa(comTitulo titulo: String) -> Conversa? {
+    func criarConversa(comTitulo titulo: String) -> Conversa? {
         guard let contexto else { return nil }
         let nova = Conversa(
             id: UUID(),
