@@ -137,6 +137,19 @@ Caminho A, Sideloadly (recomendado para a primeira instalação):
    Apple ID e escolha "Confiar". Sem esse passo o app fecha no instante em que abre.
 7. Abra o app DSH, vá em Ajustes e cole: a chave da API da DeepSeek e, se for usar a ponte, o
    endereço do tailnet mais o token da ponte.
+8. Depois que a ponte estiver configurada e respondendo no botão "Testar conexão", o botão
+   "Importar chaves do computador" traz a chave da DeepSeek do cofre do PC para o cofre do
+   iPhone, sem digitar nada. Ele usa o mesmo token da ponte e o endpoint
+   `POST /v1/credenciais/llm/exportar`; a tela informa quais nomes faltaram do lado do PC.
+
+Duas coisas que a primeira instalação ensinou, e que valem para a próxima:
+
+- O IPA tem de ter `Payload/` como pasta raiz do zip. Foi o que faltava no `DSH-livre.ipa`: o
+  pacote saía com `PayloadLivre/` na raiz e o Sideloadly recusava com
+  `Guru Meditation ... Can't listdir a file`. O workflow agora monta as duas pastas e confere a
+  primeira entrada de cada pacote com `unzip -l`.
+- Para carregar o IPA na janela do Sideloadly, o caminho que funciona é passar o arquivo como
+  argumento na linha de comando. Arrastar, colar com `Ctrl+V` e clicar no ícone não carregaram.
 
 Caminho B, AltStore (para quem quer renovação automática):
 
@@ -169,6 +182,8 @@ do app, porque isso é link, não dado compartilhado.
 |---|---|---|
 | app fecha ao abrir | perfil de desenvolvedor não autorizado, ou assinatura vencida | autorizar o perfil nos Ajustes, ou reassinar |
 | Sideloadly recusa o arquivo ou o app fecha na abertura com conta gratuita | foi instalado o `DSH.ipa` completo, que tem extensão e App Group | instalar o `DSH-livre.ipa`, que sai na mesma rodada |
+| Sideloadly para em 0% com `Can't listdir a file` | o zip do IPA não tem `Payload/` como pasta raiz | gerar o pacote pelo workflow atual, que confere a raiz |
+| "Importar chaves do computador" responde que o computador não tem as chaves | o cofre do PC não tem aquele nome, ou a ponte está com a escrita desligada | conferir o cofre da máquina e o `permitirEscrita` do `ponte.json` |
 | erro de rede no motor da ponte | Tailscale fora, notebook desligado, endereço sem `https://` | conferir o tailnet e o endereço salvo nos Ajustes |
 | motor direto responde 401 | chave da API errada ou revogada | colar a chave de novo em Ajustes |
 | widget abre mas não mostra conversa | App Group indisponível na conta gratuita | comportamento esperado, ver item 4 |
@@ -276,8 +291,9 @@ O que a rodada **não** prova, para não dar a ela mais peso do que tem:
   anexo: a troca na bolha está provada pela compilação e pela leitura do código;
 - o widget e a extensão de compartilhar compilam, mas não são executados: o simulador roda só o
   app principal, e o App Group que liga os três exige conta paga do programa de desenvolvedor;
-- o `DSH-livre.ipa` foi medido por dentro, com `zipfile`, mas nunca assinado nem instalado: a
-  prova de que ele instala com conta gratuita depende do aparelho, no passo da seção 5;
+- o `DSH-livre.ipa` foi medido por dentro, com `zipfile`, e instalado no aparelho em 25/11/2026
+  pelo Sideloadly com conta gratuita: a prova de que ele roda é a mensagem que o app mandou para
+  a sessão do DSH pela ponte, registrada na auditoria da ponte às 11:48 UTC daquele dia;
 - as capturas são do modo claro do simulador; o modo escuro não é fotografado.
 
 ## 11. O que fica aberto
@@ -294,6 +310,7 @@ cada um é uma promessa que o app ainda não cumpre.
 | folha do artefato durante a resposta | pode fechar sozinha quando o texto ao vivo vira mensagem gravada | a bolha ao vivo é substituída no fim do stream, e com ela o estado que segurava a folha |
 | widget e compartilhamento no iPhone | exigem conta paga do programa de desenvolvedor | os dois alvos usam App Group, que a conta gratuita não libera; com conta gratuita, o pacote que instala é o `DSH-livre.ipa`, sem as extensões |
 | remover anexo no transcrito | a bolha desenha o cartão sem a ação de remover | anexo já enviado não sai da conversa, e o parâmetro `aoRemover` do cartão fica reservado à barra de entrada, que ainda usa as etiquetas dela |
-| instalação em iPhone físico | nenhuma rodada chegou a um aparelho real | depende da conta Apple do dono do aparelho, do cabo e do Modo de Desenvolvedor; o passo a passo está na seção 5 |
+| instalação em iPhone físico | instalada em 25/11/2026 pelo Sideloadly com conta gratuita, e o app conversa com o DSH pela ponte | a assinatura vence em 7 dias; renovar exige o Sideloadly com o PC e o iPhone na mesma rede |
+| importar a chave de busca web | o cofre do PC não tem `TAVILY_API_KEY` nem `BRAVE_API_KEY` | criar uma chave gratuita na Tavily, gravar no cofre do PC e usar o botão de importar, ou colar direto em Ajustes |
 
 
