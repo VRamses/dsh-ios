@@ -1,24 +1,24 @@
 import AppIntents
 import UIKit
 
-// Intencoes do sistema (Siri, Atalhos, busca) do DSH.
-// Nenhuma delas abre o app: a resposta curta volta em dialogo, porque a Siri
-// corta texto longo na fala. Quando nao ha conexao pronta, a pergunta fica
-// guardada no armazem compartilhado e o app a encontra ao abrir.
+// Intenções do sistema (Siri, Atalhos, busca) do DSH.
+// Nenhuma delas abre o app: a resposta curta volta em diálogo, porque a Siri
+// corta texto longo na fala. Quando não há conexão pronta, a pergunta fica
+// guardada no armazém compartilhado e o app a encontra ao abrir.
 
-// MARK: - Conexao com a conversa
+// MARK: - Conexão com a conversa
 
-// Contrato minimo entre a intencao e o cliente de rede do app.
-// A implementacao real e do swift-base (ServicoDeepSeek ou ServicoPonte) e sera
+// Contrato mínimo entre a intenção e o cliente de rede do app.
+// A implementação real é do swift-base (ServicoDeepSeek ou ServicoPonte) e será
 // registrada no boot do app com `ConectorDePerguntas.compartilhado.motor = ...`.
-// Nao criamos cliente HTTP aqui de proposito: duplicar a rede significaria
+// Não criamos cliente HTTP aqui de propósito: duplicar a rede significaria
 // duplicar chave, token e tratamento de erro da conversa.
 protocol MotorDePerguntaRapida {
-    // Devolve a resposta inteira de uma pergunta unica. Quem chama encurta.
+    // Devolve a resposta inteira de uma pergunta única. Quem chama encurta.
     func responderUmaVez(_ pergunta: String) async throws -> String
 }
 
-// Ponto unico onde o app instala o motor usado pelas intencoes.
+// Ponto único onde o app instala o motor usado pelas intenções.
 final class ConectorDePerguntas {
     static let compartilhado = ConectorDePerguntas()
     var motor: (any MotorDePerguntaRapida)?
@@ -46,8 +46,8 @@ enum ErroDeIntencao: LocalizedError {
 
 // MARK: - Texto curto para fala
 
-// A Siri trunca dialogo longo, entao todo retorno passa por aqui: no maximo
-// tres frases e um teto de caracteres, para a fala terminar com sentido.
+// A Siri trunca diálogo longo, então todo retorno passa por aqui: no máximo
+// três frases e um teto de caracteres, para a fala terminar com sentido.
 enum TextoCurto {
     static let limiteDeFrases = 3
     static let limiteDeCaracteres = 300
@@ -96,7 +96,7 @@ struct PerguntarAoDSH: AppIntent {
     static var description: IntentDescription? = IntentDescription(
         "Faz uma pergunta ao DSH e responde em voz alta, sem abrir o app."
     )
-    // Fica no lugar: a intencao responde na hora ou guarda a pergunta.
+    // Fica no lugar: a intenção responde na hora ou guarda a pergunta.
     static var openAppWhenRun: Bool = false
 
     @Parameter(title: "Pergunta")
@@ -113,14 +113,14 @@ struct PerguntarAoDSH: AppIntent {
                 let resposta = try await motor.responderUmaVez(pergunta)
                 return .result(dialog: IntentDialog(stringLiteral: TextoCurto.paraDialogo(resposta)))
             } catch {
-                // Falhou a rede: a pergunta nao se perde, vira texto pendente
+                // Falhou a rede: a pergunta não se perde, vira texto pendente
                 // para a conversa do app.
                 guardarParaConversa(pergunta)
                 throw ErroDeIntencao.respostaIndisponivel
             }
         }
 
-        // Sem motor instalado, o app ainda nao foi aberto nesta instalacao.
+        // Sem motor instalado, o app ainda não foi aberto nesta instalação.
         guardarParaConversa(pergunta)
         return .result(dialog: "Pergunta guardada no DSH. Abra o app para ver a resposta.")
     }
@@ -131,7 +131,7 @@ struct PerguntarAoDSH: AppIntent {
     }
 }
 
-// MARK: - Resumir area de transferencia
+// MARK: - Resumir área de transferência
 
 struct ResumirAreaDeTransferencia: AppIntent {
     static var title: LocalizedStringResource = "Resumir área de transferência"
@@ -141,8 +141,8 @@ struct ResumirAreaDeTransferencia: AppIntent {
     static var openAppWhenRun: Bool = false
 
     func perform() async throws -> some IntentResult & ProvidesDialog {
-        // No iOS 16 ou mais novo o sistema pode pedir confirmacao antes de
-        // entregar a area de transferencia; e o comportamento esperado.
+        // No iOS 16 ou mais novo o sistema pode pedir confirmação antes de
+        // entregar a área de transferência; é o comportamento esperado.
         let copiado = (UIPasteboard.general.string ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         guard !copiado.isEmpty else {
             throw ErroDeIntencao.areaDeTransferenciaVazia
@@ -162,14 +162,14 @@ struct ResumirAreaDeTransferencia: AppIntent {
             }
         }
 
-        // Sem resumo de verdade disponivel, devolver um trecho do proprio texto
-        // e melhor que inventar resumo. A fala diz que e trecho.
+        // Sem resumo de verdade disponível, devolver um trecho do próprio texto
+        // é melhor que inventar resumo. A fala diz que é trecho.
         let trecho = TextoCurto.paraDialogo(copiado)
         return .result(dialog: IntentDialog(stringLiteral: "O resumo precisa do DSH conectado. Trecho copiado: \(trecho)"))
     }
 }
 
-// MARK: - Frases de ativacao na Siri
+// MARK: - Frases de ativação na Siri
 
 struct AtalhosDoDSH: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
@@ -195,7 +195,7 @@ struct AtalhosDoDSH: AppShortcutsProvider {
     }
 }
 
-// Lista usada pelo app quando precisa registrar ou depurar as intencoes.
+// Lista usada pelo app quando precisa registrar ou depurar as intenções.
 enum IntencoesRegistradas {
     static var todas: [any AppIntent.Type] {
         [PerguntarAoDSH.self, ResumirAreaDeTransferencia.self]

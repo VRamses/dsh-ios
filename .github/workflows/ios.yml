@@ -81,7 +81,8 @@ jobs:
             xcrun simctl terminate "$UDID" "$BUNDLE_ID" >/dev/null 2>&1 || true
             xcrun simctl launch "$UDID" "$BUNDLE_ID" \
               -rota "$ROTA" -demonstracao 1 \
-              --stdout "build/logs/$ROTA.out" --stderr "build/logs/$ROTA.err" || true
+              --stdout="$PWD/build/logs/$ROTA.out" \
+              --stderr="$PWD/build/logs/$ROTA.err" || true
             sleep 5
             xcrun simctl io "$UDID" screenshot "build/simulador/$ROTA.png"
             grep -a "rota efetiva" "build/logs/$ROTA.out" || echo "aviso: $ROTA sem a linha 'rota efetiva'"
