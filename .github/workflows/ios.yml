@@ -82,13 +82,20 @@ jobs:
           UDID="${{ steps.simulador.outputs.udid }}"
           mkdir -p build/simulador build/logs
           xcrun simctl install "$UDID" build/Debug-iphonesimulator/DSH.app
-          for ROTA in conversa voz ajustes dsh artefato; do
+          # A ordem importa: a rota de voz pede permissão de reconhecimento de fala, e o
+          # alerta do sistema fica por cima do app até alguém tocar em Allow. Com voz no
+          # meio, todas as capturas seguintes saíam com o diálogo cobrindo a tela
+          # (medido na rodada 45542407856). Por isso voz é a última.
+          for ROTA in conversa ajustes dsh artefato voz; do
             xcrun simctl terminate "$UDID" "$BUNDLE_ID" >/dev/null 2>&1 || true
+            # Permissão concedida antes de abrir evita que o alerta apareça na captura.
+            xcrun simctl privacy "$UDID" grant microphone "$BUNDLE_ID" >/dev/null 2>&1 || true
+            xcrun simctl privacy "$UDID" grant siri "$BUNDLE_ID" >/dev/null 2>&1 || true
             xcrun simctl launch "$UDID" "$BUNDLE_ID" \
               -rota "$ROTA" -demonstracao 1 \
               --stdout="$PWD/build/logs/$ROTA.out" \
               --stderr="$PWD/build/logs/$ROTA.err" || true
-            sleep 5
+            sleep 7
             xcrun simctl io "$UDID" screenshot "build/simulador/$ROTA.png"
             grep -a "rota efetiva" "build/logs/$ROTA.out" || echo "aviso: $ROTA sem a linha 'rota efetiva'"
           done

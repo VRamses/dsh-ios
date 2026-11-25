@@ -93,7 +93,12 @@ struct TelaPrincipal: View {
                 .padding(.bottom, Espaco.xxl)
             }
             .scrollDismissesKeyboard(.interactively)
-            .onAppear { rolar(rolagem, animado: false) }
+            .onAppear {
+                Task { @MainActor in
+                    await Task.yield()
+                    rolarAoComecoDaUltimaResposta(rolagem)
+                }
+            }
             .onChange(of: modelo.textoAoVivo) { _, _ in rolar(rolagem) }
             .onChange(of: modelo.estaRespondendo) { _, _ in rolar(rolagem) }
             .onReceive(modelo.$conversa) { atual in
@@ -102,6 +107,10 @@ struct TelaPrincipal: View {
                 if let atual, novaConversaPendente {
                     novaConversaPendente = false
                     conversaAtual = atual
+                }
+                Task { @MainActor in
+                    await Task.yield()
+                    rolarAoComecoDaUltimaResposta(rolagem)
                 }
             }
         }
@@ -172,6 +181,8 @@ struct TelaPrincipal: View {
             } label: {
                 Image(systemName: "line.3.horizontal")
                     .font(.system(size: 15, weight: .semibold))
+                    .frame(minWidth: 44, minHeight: 44)
+                    .contentShape(Rectangle())
             }
             .tint(Cores.texto)
             .accessibilityLabel("Abrir conversas")
@@ -182,6 +193,8 @@ struct TelaPrincipal: View {
             } label: {
                 Image(systemName: "square.and.pencil")
                     .font(.system(size: 15, weight: .semibold))
+                    .frame(minWidth: 44, minHeight: 44)
+                    .contentShape(Rectangle())
             }
             .tint(Cores.texto)
             .accessibilityLabel("Nova conversa")
@@ -378,6 +391,20 @@ struct TelaPrincipal: View {
             withAnimation(.easeOut(duration: 0.25)) {
                 rolagem.scrollTo("fim", anchor: .bottom)
             }
+        } else {
+            rolagem.scrollTo("fim", anchor: .bottom)
+        }
+    }
+
+    /// Ao abrir uma conversa, para no começo da última resposta em vez do fim:
+    /// assim a tela mostra quem falou e o começo do raciocínio, não o meio de um
+    /// bloco de código comprido.
+    @MainActor
+    private func rolarAoComecoDaUltimaResposta(_ rolagem: ScrollViewProxy) {
+        if let ultima = mensagens.last(where: { $0.papel == .assistente }) {
+            rolagem.scrollTo(ultima.id, anchor: .top)
+        } else if let primeira = mensagens.first {
+            rolagem.scrollTo(primeira.id, anchor: .top)
         } else {
             rolagem.scrollTo("fim", anchor: .bottom)
         }

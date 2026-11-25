@@ -1,11 +1,12 @@
 import SwiftUI
 
-// Fontes/Desenho/ ainda não existe. Enquanto swift-chat não publicar os tokens,
-// estas cores e medidas ficam aqui: é o ponto de troca por Cores, Espaco, Raio e Tipografia.
+// Cores, Espaco, Raio e Tipografia vivem em Fontes/Desenho e são a fonte dos tokens.
+// Escutar usa o acento do app e falar usa texto, o mesmo par de contraste do botão
+// de enviar: o glifo é Cores.fundo, nunca branco fixo.
 private enum PaletaDaVoz {
-    static let escutando = Color.accentColor
+    static let escutando = Cores.acento
     static let pensando = Color.orange
-    static let falando = Color.green
+    static let falando = Cores.texto
     static let ocioso = Color.secondary
 }
 
@@ -266,7 +267,7 @@ struct TelaDeVoz: View {
         Button(action: acaoDoMicrofone) {
             Image(systemName: iconeDoMicrofone)
                 .font(.system(size: 30, weight: .semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(Cores.fundo)
                 .frame(width: 76, height: 76)
                 .background(corDoBotao, in: Circle())
         }

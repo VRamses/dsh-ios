@@ -17,9 +17,14 @@ import UIKit
 /// | sucesso | 9,4:1 / 5,6:1 | 8,7:1 / 6,2:1 | 7,6:1 / 6,2:1 |
 ///
 /// Borda passa 3,1:1 no escuro e 3,2:1 no claro contra a superfície, que é o
-/// mínimo de 3:1 para borda de campo e ícone. Texto do usuário sobre o
-/// `acentoSuave` fica em 13,3:1 no escuro e 15,2:1 no claro. O glifo do botão
-/// de enviar usa `fundo` sobre `acento`: 8,7:1 no escuro e 5,4:1 no claro.
+/// mínimo de 3:1 para borda de campo e ícone. A superfície de entrada sobe um
+/// degrau acima do bloco de código e mantém a leitura: sobre ela, texto fica em
+/// 11,5:1 no escuro e 18,0:1 no claro, texto fraco em 5,9:1 no escuro e 6,2:1 no
+/// claro e o acento em 6,1:1 no escuro e 5,9:1 no claro. A borda de entrada faz
+/// 3,4:1 no escuro e 3,2:1 no claro, para o campo não sumir no cartão. Texto do
+/// usuário sobre o `acentoSuave` fica em 13,3:1 no escuro e 15,2:1 no claro. O
+/// glifo do botão de enviar usa `fundo` sobre `acento`: 8,7:1 no escuro e 5,4:1
+/// no claro.
 enum Cores {
     /// Chão da tela, onde o transcrito flutua.
     static let fundo = dinamica(claro: 0xF6F4F0, escuro: 0x0E1013)
@@ -27,8 +32,14 @@ enum Cores {
     static let superficie = dinamica(claro: 0xFFFFFF, escuro: 0x16191D)
     /// Superfície que sobe um degrau: bloco de código e cartão do pensamento.
     static let superficieElevada = dinamica(claro: 0xFFFFFF, escuro: 0x20252B)
+    /// Superfície do campo de entrada, mais clara que o bloco de código para o
+    /// composer não parecer mais uma mensagem do transcrito.
+    static let superficieDeEntrada = dinamica(claro: 0xFFFFFF, escuro: 0x2A3038)
     /// Borda de campo e de cartão. É o mínimo de 3:1 contra a superfície.
     static let borda = dinamica(claro: 0x8B9099, escuro: 0x5F6772)
+    /// Fio do campo de entrada, mais definido que a borda de cartão porque o
+    /// composer divide a tela com o bloco de código, do mesmo tom.
+    static let bordaDeEntrada = dinamica(claro: 0x8B9099, escuro: 0x7A828C)
     /// Texto principal e ícone ativo.
     static let texto = dinamica(claro: 0x15171A, escuro: 0xEDEFF2)
     /// Texto de apoio: raciocínio, meta, estado vazio.

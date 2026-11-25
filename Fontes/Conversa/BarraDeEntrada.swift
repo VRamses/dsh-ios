@@ -65,11 +65,11 @@ struct BarraDeEntrada: View {
         }
         .padding(.horizontal, Espaco.l)
         .padding(.vertical, Espaco.m)
-        .background(Cores.superficie)
+        .background(Cores.superficieDeEntrada)
         .clipShape(RoundedRectangle(cornerRadius: Raio.l, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: Raio.l, style: .continuous)
-                .strokeBorder(Cores.borda.opacity(0.6), lineWidth: 1)
+                .strokeBorder(Cores.bordaDeEntrada, lineWidth: 1)
         )
         .fileImporter(
             isPresented: $escolhendoArquivo,
@@ -116,6 +116,7 @@ struct BarraDeEntrada: View {
             .frame(height: 32)
             .background(Cores.superficieElevada)
             .clipShape(RoundedRectangle(cornerRadius: Raio.s, style: .continuous))
+            .frame(minWidth: 44, minHeight: 44)
             .contentShape(Rectangle())
         }
         .accessibilityLabel("Modelo: \(rotuloDoModelo)")
