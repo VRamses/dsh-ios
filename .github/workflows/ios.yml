@@ -65,6 +65,25 @@ jobs:
             SYMROOT="$PWD/build" \
             build
 
+      # Os alvos secundarios nao aparecem em nenhuma captura, entao um erro de
+      # compilacao no widget ou na extensao de compartilhar passaria batido na
+      # rodada. Esta etapa compila os dois com as mesmas flags do alvo principal
+      # e derruba o job se qualquer um falhar.
+      - name: Compilar o widget e a extensao de compartilhar
+        run: |
+          set -euo pipefail
+          for SECUNDARIO in DSHWidget DSHCompartilhar; do
+            echo "::group::compilar $SECUNDARIO"
+            xcodebuild -project DSH.xcodeproj \
+              -target "$SECUNDARIO" \
+              -configuration Debug \
+              -sdk iphonesimulator \
+              CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+              SYMROOT="$PWD/build" \
+              build
+            echo "::endgroup::"
+          done
+
       - name: Preparar simulador
         id: simulador
         run: |
