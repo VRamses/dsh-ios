@@ -206,6 +206,41 @@ final class ServicoPonte: ProvedorDeConversa {
         )
     }
 
+    // MARK: - Pareamento por QR
+
+    /// Troca o código de um QR pelo token da ponte. É a única chamada da ponte
+    /// que não leva Bearer, de propósito: quem ainda não tem token é justamente
+    /// quem está pareando, e o código vale uma vez só, por cinco minutos.
+    static func trocarCodigo(
+        _ codigo: String,
+        endereco: String
+    ) async throws -> (token: String, rotulo: String?) {
+        var base = endereco.trimmingCharacters(in: .whitespacesAndNewlines)
+        while base.hasSuffix("/") {
+            base.removeLast()
+        }
+        guard let url = URL(string: base + "/v1/pareamento/trocar") else {
+            throw ErroDaConversa.enderecoInvalido
+        }
+        var requisicao = URLRequest(url: url)
+        requisicao.httpMethod = "POST"
+        requisicao.timeoutInterval = 30
+        requisicao.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        requisicao.setValue("application/json", forHTTPHeaderField: "Accept")
+        requisicao.httpBody = try JSONSerialization.data(withJSONObject: ["codigo": codigo])
+
+        let (dados, resposta) = try await URLSession.shared.data(for: requisicao)
+        let codigoHTTP = (resposta as? HTTPURLResponse)?.statusCode ?? 0
+        let objeto = (try? JSONSerialization.jsonObject(with: dados)) as? [String: Any]
+        guard codigoHTTP == 200,
+              let token = objeto?["token"] as? String,
+              !token.isEmpty else {
+            let texto = String(data: dados, encoding: .utf8) ?? ""
+            throw ErroDaConversa.http(codigoHTTP, String(texto.prefix(200)))
+        }
+        return (token, objeto?["rotulo"] as? String)
+    }
+
     func eventos() -> AsyncThrowingStream<EventoDaPonte, Error> {
         tarefaDaResposta?.cancel()
         tarefaDeEventos?.cancel()

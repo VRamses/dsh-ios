@@ -34,6 +34,9 @@ struct TelaDeAjustes: View {
     @State private var resultadoDoTeste: ResultadoDoTeste?
     @State private var importando = false
     @State private var resultadoDaImportacao: ResultadoDoTeste?
+    @State private var testandoDeepSeek = false
+    @State private var diagnosticoDeepSeek: String?
+    @State private var pareando = false
 
     /// Nomes das chaves como estão no cofre do DSH na máquina da ponte. A
     /// DeepSeek é a única que existe hoje; as de busca entram aqui porque o
@@ -72,7 +75,10 @@ struct TelaDeAjustes: View {
             }
         }
         .environment(\.locale, Locale(identifier: "pt_BR"))
-        .task { await lerCofre() }
+        .task {
+            await lerCofre()
+            await aplicarPareamento()
+        }
     }
 
     // MARK: - 1. Motor
@@ -127,6 +133,31 @@ struct TelaDeAjustes: View {
 
             if let avisoDeepSeek {
                 linhaDeAviso(avisoDeepSeek)
+            }
+
+            Button {
+                Task { await testarChaveDeepSeek() }
+            } label: {
+                HStack(spacing: Espaco.s) {
+                    Image(systemName: "bolt.horizontal.circle")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(Cores.acento)
+                    Text(testandoDeepSeek ? "Testando a chave..." : "Testar a chave")
+                        .font(Tipografia.corpo())
+                        .foregroundStyle(Cores.texto)
+                    Spacer(minLength: 0)
+                }
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(testandoDeepSeek)
+            .listRowBackground(Cores.superficie)
+            .accessibilityLabel("Testar a chave da DeepSeek")
+            .accessibilityHint("Faz um pedido curto à API da DeepSeek e mostra o código HTTP e o começo da resposta.")
+
+            if let diagnosticoDeepSeek {
+                textoDeApoio(diagnosticoDeepSeek)
             }
 
             textoDeApoio("A chave fica no Keychain deste iPhone e é lida na hora de cada pedido. O app não imprime a chave em log.")
@@ -476,6 +507,52 @@ struct TelaDeAjustes: View {
             avisoDaBusca = "Chave de busca apagada do cofre."
         } catch {
             avisoDaBusca = error.localizedDescription
+        }
+    }
+
+    // MARK: - Teste da chave da DeepSeek
+
+    /// Pedido de dezesseis tokens, sem streaming: mostra o código HTTP e o
+    /// começo do corpo. É o que separa chave errada (401), modelo errado (400)
+    /// e telefone sem rede quando a conversa não responde.
+    @MainActor
+    private func testarChaveDeepSeek() async {
+        testandoDeepSeek = true
+        diagnosticoDeepSeek = nil
+        defer { testandoDeepSeek = false }
+
+        let chave = (try? CofreDeChaves.ler(ChaveDoCofre.apiKeyDeepSeek)) ?? nil
+        diagnosticoDeepSeek = await ServicoDeepSeek.diagnosticar(
+            chave: chave ?? "",
+            modelo: preferencias.modelo
+        )
+    }
+
+    // MARK: - Pareamento por QR
+
+    /// Aplica o pedido que chegou num QR: grava o endereço, troca o código de
+    /// uso único pelo token, guarda o token no cofre e liga o motor da ponte. O
+    /// token nunca viajou no QR e não aparece na tela.
+    @MainActor
+    private func aplicarPareamento() async {
+        guard let pedido = PendenciaDePareamento.atual else { return }
+        PendenciaDePareamento.atual = nil
+
+        preferencias.enderecoDaPonte = pedido.endereco
+        pareando = true
+        avisoDaPonte = nil
+        resultadoDoTeste = nil
+        defer { pareando = false }
+
+        do {
+            let trocado = try await ServicoPonte.trocarCodigo(pedido.codigo, endereco: pedido.endereco)
+            try CofreDeChaves.guardar(trocado.token, para: ChaveDoCofre.tokenDaPonte)
+            finalDoToken = String(trocado.token.suffix(4))
+            preferencias.usaPonte = true
+            avisoDaPonte = "Pareado com \(trocado.rotulo ?? "a ponte"): token salvo no cofre e motor da ponte ligado."
+            await testarPonte()
+        } catch {
+            avisoDaPonte = "Não consegui trocar o código do QR: \(error.localizedDescription)"
         }
     }
 

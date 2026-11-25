@@ -55,9 +55,6 @@ struct TelaPrincipal: View {
             ZStack(alignment: .leading) {
                 Cores.fundo.ignoresSafeArea()
                 transcrito
-                if menuAberto {
-                    camadaDoMenu
-                }
             }
             .navigationTitle(tituloDaConversa)
             .navigationBarTitleDisplayMode(.inline)
@@ -84,6 +81,14 @@ struct TelaPrincipal: View {
                 }
             }
             .task { await configurar() }
+        }
+        // A gaveta fica por cima da NavigationStack inteira, e não dentro dela:
+        // dentro, ela começava abaixo da barra de título e terminava acima da
+        // barra de digitação, então sobrava conversa aparecendo dos dois lados.
+        .overlay(alignment: .leading) {
+            if menuAberto {
+                camadaDoMenu
+            }
         }
     }
 
@@ -265,7 +270,7 @@ struct TelaPrincipal: View {
             Button {
                 fecharMenu()
             } label: {
-                Color.black.opacity(0.4)
+                Color.black.opacity(0.55)
                     .ignoresSafeArea()
             }
             .buttonStyle(.plain)
@@ -282,9 +287,18 @@ struct TelaPrincipal: View {
                 aoAbrirAjustes: abrirAjustes,
                 aoFechar: fecharMenu
             )
-            .frame(width: 320)
-            .frame(maxHeight: .infinity)
-            .background(Cores.superficie)
+            // Largura toda: com 320 pt fixos sobrava uma faixa de conversa à
+            // direita, que é o que fazia a gaveta parecer quebrada no iPhone.
+            // O fundo ignora a safe area para cobrir a barra de status; o
+            // conteúdo continua dentro dela.
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            .background(Cores.superficie.ignoresSafeArea())
+            .overlay(alignment: .trailing) {
+                Rectangle()
+                    .fill(Cores.texto.opacity(0.10))
+                    .frame(width: 1)
+                    .ignoresSafeArea()
+            }
             .transition(.move(edge: .leading))
         }
         .transition(.opacity)

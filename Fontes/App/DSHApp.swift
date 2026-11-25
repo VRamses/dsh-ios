@@ -138,6 +138,12 @@ struct DSHApp: App {
         case .voz:
             rota = .voz
         case .ajustes:
+            // QR de pareamento chega como dsh://ajustes?parear=...&endereco=...
+            // A rota continua sendo a de sempre; o que muda é que Ajustes, ao
+            // abrir, acha o pedido e troca o código pelo token.
+            if let endereco = userInfo?[TratadorDeUrl.Chave.endereco] as? String {
+                PendenciaDePareamento.recolher(de: endereco)
+            }
             rota = .ajustes
         case .novo:
             rota = .conversa

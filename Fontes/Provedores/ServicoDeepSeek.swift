@@ -215,4 +215,44 @@ final class ServicoDeepSeek: ProvedorDeConversa {
         if let erroDeURL = erro as? URLError, erroDeURL.code == .cancelled { return true }
         return false
     }
+
+    // MARK: - Diagnóstico da chave
+
+    /// Pedido mínimo à API, sem streaming, só para a tela de Ajustes dizer o que
+    /// o telefone recebe de verdade. Devolve o código HTTP e o começo do corpo,
+    /// que é o que separa chave errada (401), modelo errado (400) e rede fora.
+    static func diagnosticar(chave: String, modelo: String) async -> String {
+        let limpa = chave.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !limpa.isEmpty else {
+            return "Nenhuma chave no cofre. Cole a chave ou importe do computador."
+        }
+        guard let endereco = URL(string: "https://api.deepseek.com/chat/completions") else {
+            return "Endereço da API inválido."
+        }
+
+        var requisicao = URLRequest(url: endereco)
+        requisicao.httpMethod = "POST"
+        requisicao.timeoutInterval = 60
+        requisicao.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        requisicao.setValue("Authorization", forHTTPHeaderField: "Bearer \(limpa)")
+
+        let corpo: [String: Any] = [
+            "model": modelo,
+            "messages": [["role": "user", "content": "responda apenas: ok"]],
+            "max_tokens": 16,
+            "stream": false,
+        ]
+        do {
+            requisicao.httpBody = try JSONSerialization.data(withJSONObject: corpo)
+            let (dados, resposta) = try await URLSession.shared.data(for: requisicao)
+            let status = (resposta as? HTTPURLResponse)?.statusCode ?? 0
+            let texto = String(data: dados, encoding: .utf8) ?? ""
+            let inicio = texto
+                .replacingOccurrences(of: "\n", with: " ")
+                .prefix(240)
+            return "HTTP \(status). Resposta: \(inicio)"
+        } catch {
+            return "Não chegou a responder: \(error.localizedDescription)"
+        }
+    }
 }
