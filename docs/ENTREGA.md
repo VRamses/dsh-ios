@@ -218,30 +218,32 @@ Duas consequências práticas:
 
 ## 10. O que a última rodada do CI prova
 
-A rodada `45552109815` rodou sobre o commit `5f28a33` e terminou com os dois jobs em `success`,
+A rodada `45554933068` rodou sobre o commit `6b2803e` e terminou com os dois jobs em `success`,
 passo por passo. Os números abaixo saíram do artefato baixado e aberto aqui, não do log do
 Actions.
 
 | o que | como foi medido | resultado |
 |---|---|---|
 | job `simulador` | compilar, instalar no iPhone 16 do simulador e capturar as cinco rotas | `success`, 5 capturas de 1206x2622 |
-| widget e extensão de compartilhar | passo próprio, `xcodebuild -target DSHWidget` e `-target DSHCompartilhar` | `success`, os dois alvos compilam; antes desta rodada eles não eram compilados por ninguém |
-| job `ipa` | compilar para aparelho sem assinatura e empacotar | `success`, `DSH.ipa` com 815.850 bytes |
-| binário | `Payload/DSH.app/DSH` dentro do IPA | 3.084.832 bytes |
+| widget e extensão de compartilhar | passo próprio, `xcodebuild -target DSHWidget` e `-target DSHCompartilhar` | `success`, os dois alvos compilam |
+| job `ipa` | compilar para aparelho sem assinatura e empacotar os dois pacotes | `success`, `DSH.ipa` com 821.846 bytes e `DSH-livre.ipa` com 764.148 bytes |
+| pacote livre | listar as entradas do `.ipa` com `zipfile` | 15 entradas e **zero** com `PlugIns`: o pacote é só `Payload/DSH.app` |
+| pacote completo | mesma listagem | `DSHWidget.appex` e `DSHCompartilhar.appex` dentro de `Payload/DSH.app/PlugIns/` |
+| binário | `Payload/DSH.app/DSH` dentro do IPA | 3.108.192 bytes |
 | catálogo de ícones | `Payload/DSH.app/Assets.car` | 32.735 bytes, ou seja, o catálogo compilou e não saiu vazio |
 | ícones derivados | PNGs dentro do pacote | `AppIcon60x60@2x.png` com 2.861 bytes e `AppIcon76x76@2x~ipad.png` com 3.500 bytes |
-| `Info.plist` do pacote | lido com `plistlib` | `dev.ramses.dsh`, versão `1.0.0` (build `1`), `MinimumOSVersion` 18.0, `DTXcode` 1640, `DTPlatformVersion` 18.5 |
+| `Info.plist` do pacote | lido com `plistlib` | `dev.ramses.dsh`, versão `1.0.0` (build `1`), `MinimumOSVersion` 18.0, `DTXcode` 1640, `DTPlatformVersion` 18.5, `Info.plist` com 3.213 bytes |
 | ícone ligado ao alvo | `CFBundleIconName` e `CFBundlePrimaryIcon` | `AppIcon`, com `CFBundleIconFiles = [AppIcon60x60]` |
 
 O que cada captura mostra, com o tamanho do arquivo:
 
 | captura | bytes | o que está na tela |
 |---|---|---|
-| `conversa.png` | 292.523 | o fim de uma resposta, com o bloco de código e dois cartões de artefato: "Relógio de parede" (HTML) e "Relógio em SVG" (SVG) |
-| `artefato.png` | 662.544 | o visualizador do artefato HTML rodando o relógio dentro do `WKWebView`, com o ponteiro na hora do relógio do simulador, e o seletor entre Visualização e Código |
-| `ajustes.png` | 303.843 | a folha de Ajustes, com o seletor de motor, o cofre da DeepSeek, o endereço e o token da ponte, e as ações de salvar e apagar |
-| `dsh.png` | 154.230 | a folha de sessões aberta pela rota `dsh`, no estado sem ponte configurada, que é o estado de fábrica do simulador |
-| `voz.png` | 750.103 | a tela de voz com o botão de gravação |
+| `conversa.png` | 292.172 | o fim de uma resposta, com o bloco de código e dois cartões de artefato: "Relógio de parede" (HTML) e "Relógio em SVG" (SVG) |
+| `artefato.png` | 655.115 | o visualizador do artefato HTML rodando o relógio dentro do `WKWebView`, com o ponteiro na hora do relógio do simulador, e o seletor entre Visualização e Código |
+| `ajustes.png` | 303.492 | a folha de Ajustes, com o seletor de motor, o cofre da DeepSeek, o endereço e o token da ponte, e as ações de salvar e apagar |
+| `dsh.png` | 153.901 | a folha de sessões aberta pela rota `dsh`, no estado sem ponte configurada, que é o estado de fábrica do simulador |
+| `voz.png` | 642.677 | a tela de voz no estado ocioso, "Microfone desligado", que é o padrão com a voz automática desligada |
 
 As cinco capturas estão versionadas em `docs/capturas/`, tiradas desta rodada, para não
 depender de baixar artefato do Actions para olhar a tela:
@@ -260,9 +262,14 @@ O que a rodada **não** prova, para não dar a ela mais peso do que tem:
   tocar em botão. Salvar chave, testar conexão e enviar pela ponte continuam verificados só por
   leitura de código;
 - a voz capturada é a tela, não o resultado de um reconhecimento: o microfone do simulador é
-  permissão dada pelo `simctl`, sem áudio real;
+  permissão dada pelo `simctl`, sem áudio real. O que `voz.png` prova é só o estado ocioso, que
+  é o esperado com a preferência de voz automática desligada, o padrão de fábrica;
+- o cartão de anexo não aparece em captura nenhuma, porque a conversa de demonstração não tem
+  anexo: a troca na bolha está provada pela compilação e pela leitura do código;
 - o widget e a extensão de compartilhar compilam, mas não são executados: o simulador roda só o
   app principal, e o App Group que liga os três exige conta paga do programa de desenvolvedor;
+- o `DSH-livre.ipa` foi medido por dentro, com `zipfile`, mas nunca assinado nem instalado: a
+  prova de que ele instala com conta gratuita depende do aparelho, no passo da seção 5;
 - as capturas são do modo claro do simulador; o modo escuro não é fotografado.
 
 ## 11. O que fica aberto
@@ -272,13 +279,13 @@ cada um é uma promessa que o app ainda não cumpre.
 
 | o que | estado | por que não foi feito |
 |---|---|---|
-| anexo na conversa | a mensagem mostra o ícone e o nome do arquivo, não a miniatura | existe `CartaoDeAnexo` pronto em `Fontes/Artefatos`, e a bolha ainda usa a lista de nomes |
 | validar a chave da DeepSeek em Ajustes | só confere o prefixo `sk-` | a API não tem rota de validação de chave, e inventar uma custaria uma chamada paga a cada toque |
-| voz automática | a preferência é gravada, mas a tela de voz não a lê | a tela ainda tem botão de gravar e parar manual |
 | bloco de código muito longo | cresce sem limite dentro da bolha | cortar com "mostrar mais" mexe no `TextoRico`, e a conversa de demonstração já usa o limite como prova de rolagem |
 | primeiro quadro da resposta ao vivo | o recuo pendente aparece a partir do segundo quadro | o streaming chega em pedaços e o primeiro é renderizado antes de haver linha completa |
 | criar sessão pela ponte | `POST /v1/sessoes` e `/mensagem` foram verificados só por leitura de código | a rodada do CI não tem tailnet, então não há como exercitar a ponte de dentro do simulador |
 | folha do artefato durante a resposta | pode fechar sozinha quando o texto ao vivo vira mensagem gravada | a bolha ao vivo é substituída no fim do stream, e com ela o estado que segurava a folha |
-| widget e compartilhamento no iPhone | exigem conta paga do programa de desenvolvedor | os dois alvos usam App Group, que a conta gratuita não libera; com conta gratuita, só o app principal instala |
+| widget e compartilhamento no iPhone | exigem conta paga do programa de desenvolvedor | os dois alvos usam App Group, que a conta gratuita não libera; com conta gratuita, o pacote que instala é o `DSH-livre.ipa`, sem as extensões |
+| remover anexo no transcrito | a bolha desenha o cartão sem a ação de remover | anexo já enviado não sai da conversa, e o parâmetro `aoRemover` do cartão fica reservado à barra de entrada, que ainda usa as etiquetas dela |
+| instalação em iPhone físico | nenhuma rodada chegou a um aparelho real | depende da conta Apple do dono do aparelho, do cabo e do Modo de Desenvolvedor; o passo a passo está na seção 5 |
 
 

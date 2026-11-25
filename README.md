@@ -21,8 +21,12 @@ sem sessão não há para onde mandar a pergunta.
 - A rodada compila o app, o widget e a extensão de compartilhar, roda no simulador e captura as
   cinco rotas. As capturas ficam em [docs/capturas](docs/capturas).
 - A saída principal é um IPA **sem assinatura**: o iPhone não instala o arquivo sozinho, ele
-  precisa ser assinado com a sua conta Apple antes. Conta gratuita serve, com os limites que a
-  entrega descreve (3 apps por semana, re-assinar a cada 7 dias, sem App Group).
+  precisa ser assinado com a sua conta Apple antes. O `ipa` traz dois pacotes:
+  `DSH-livre.ipa`, só o app principal, que é o que se instala com conta Apple gratuita, e
+  `DSH.ipa`, com o widget e a extensão de compartilhar, que só assina em conta paga.
+- Conta gratuita serve, com os limites que a entrega descreve (3 apps por semana, re-assinar a
+  cada 7 dias, sem App Group), e o passo a passo de Sideloadly e de AltStore está em
+  [docs/ENTREGA.md](docs/ENTREGA.md), seção 5.
 - Nada foi testado em iPhone físico: o que está provado é compilação, empacotamento e execução
   no simulador.
 
