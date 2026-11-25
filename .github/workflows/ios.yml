@@ -203,18 +203,26 @@ jobs:
       - name: Empacotar IPA
         run: |
           set -euo pipefail
-          rm -rf build/Payload build/PayloadLivre
-          mkdir -p build/Payload build/PayloadLivre
+          # A pasta empacotada tem de se chamar Payload dentro do zip: o iOS
+          # procura exatamente esse nome na raiz do IPA. Por isso a variante sem
+          # extensoes e montada em build/livre/Payload, e nao numa pasta chamada
+          # PayloadLivre, que gerava um IPA invalido (o Sideloadly respondia
+          # "Can't listdir a file" e recusava instalar).
+          rm -rf build/Payload build/livre
+          mkdir -p build/Payload build/livre/Payload
           cp -R build/Release-iphoneos/DSH.app build/Payload/DSH.app
           ditto -c -k --keepParent build/Payload build/DSH.ipa
-          cp -R build/Release-iphoneos/DSH.app build/PayloadLivre/DSH.app
-          rm -rf build/PayloadLivre/DSH.app/PlugIns
-          ditto -c -k --keepParent build/PayloadLivre build/DSH-livre.ipa
+          cp -R build/Release-iphoneos/DSH.app build/livre/Payload/DSH.app
+          rm -rf build/livre/Payload/DSH.app/PlugIns
+          (cd build/livre && ditto -c -k --keepParent Payload ../DSH-livre.ipa)
           ls -lh build/DSH.ipa build/DSH-livre.ipa
+          echo "raiz de cada pacote (tem de ser Payload nos dois):"
+          unzip -l build/DSH.ipa | awk 'NR==4 {print "completo: " $4}'
+          unzip -l build/DSH-livre.ipa | awk 'NR==4 {print "livre: " $4}'
           echo "extensoes no pacote completo:"
           ls build/Payload/DSH.app/PlugIns || true
           echo "extensoes no pacote livre (tem de ser vazio):"
-          ls build/PayloadLivre/DSH.app/PlugIns || true
+          ls build/livre/Payload/DSH.app/PlugIns || true
 
       - name: Guardar IPA
         uses: actions/upload-artifact@v4
