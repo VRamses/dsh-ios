@@ -32,6 +32,13 @@ struct TelaDeAjustes: View {
     @State private var avisoDaPonte: String?
     @State private var testando = false
     @State private var resultadoDoTeste: ResultadoDoTeste?
+    @State private var importando = false
+    @State private var resultadoDaImportacao: ResultadoDoTeste?
+
+    /// Nomes das chaves como estão no cofre do DSH na máquina da ponte. A
+    /// DeepSeek é a única que existe hoje; as de busca entram aqui porque o
+    /// custo de pedir a mais é zero e a resposta já diz quais faltaram.
+    private static let nomesParaImportar = ["DEEPSEEK_API_KEY", "TAVILY_API_KEY", "BRAVE_API_KEY"]
 
     var body: some View {
         NavigationStack {
@@ -201,6 +208,33 @@ struct TelaDeAjustes: View {
             }
 
             textoDeApoio("O teste usa o endereço acima e o token salvo no cofre. Salve o token antes de testar.")
+
+            Button {
+                Task { await importarChavesDoComputador() }
+            } label: {
+                HStack(spacing: Espaco.s) {
+                    Image(systemName: "square.and.arrow.down")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(Cores.acento)
+                    Text(importando ? "Importando..." : "Importar chaves do computador")
+                        .font(Tipografia.corpo())
+                        .foregroundStyle(Cores.texto)
+                    Spacer(minLength: 0)
+                }
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(importando)
+            .listRowBackground(Cores.superficie)
+            .accessibilityLabel("Importar chaves do computador")
+            .accessibilityHint("Pede à ponte as chaves que já estão no cofre do DSH e grava as que existirem no cofre deste iPhone.")
+
+            if let resultadoDaImportacao {
+                linhaDoResultado(resultadoDaImportacao)
+            }
+
+            textoDeApoio("A importação usa o endereço e o token acima, e só funciona com a ponte ligada no computador. Ela traz a chave da DeepSeek e, se houver, a de busca web, direto para o Keychain deste iPhone.")
         } header: {
             cabecalho("Ponte do DSH")
         }
@@ -476,6 +510,57 @@ struct TelaDeAjustes: View {
             }
         } catch {
             resultadoDoTeste = .falha(error.localizedDescription)
+        }
+    }
+
+    // MARK: - Importação das chaves
+
+    /// Copia para o cofre deste iPhone o que já está no cofre do computador.
+    ///
+    /// A ordem importa: só grava depois de a ponte responder, e grava chave por
+    /// chave, para uma falha no meio não deixar a tela dizendo que importou o
+    /// que não importou. A mensagem final diz o que entrou e o que faltou no
+    /// computador, sem nunca imprimir o valor de nenhuma chave.
+    @MainActor
+    private func importarChavesDoComputador() async {
+        importando = true
+        resultadoDaImportacao = nil
+        defer { importando = false }
+
+        guard let ponte = ServicoPonte.aPartirDasPreferencias() else {
+            resultadoDaImportacao = .falha("Salve o endereço e o token da ponte antes de importar.")
+            return
+        }
+
+        do {
+            let resposta = try await ponte.importarChaves(nomes: Self.nomesParaImportar)
+            var entraram: [String] = []
+
+            if let valor = resposta.chaves["DEEPSEEK_API_KEY"] {
+                try CofreDeChaves.guardar(valor, para: ChaveDoCofre.apiKeyDeepSeek)
+                finalDaChaveDeepSeek = String(valor.suffix(4))
+                avisoDeepSeek = "Chave da DeepSeek importada do computador."
+                entraram.append("DeepSeek")
+            }
+
+            if let valor = resposta.chaves["TAVILY_API_KEY"] ?? resposta.chaves["BRAVE_API_KEY"] {
+                try CofreDeChaves.guardar(valor, para: ChaveDoCofre.chaveBuscaWeb)
+                finalDaChaveDaBusca = String(valor.suffix(4))
+                avisoDaBusca = "Chave de busca importada do computador."
+                entraram.append("busca web")
+            }
+
+            if entraram.isEmpty {
+                resultadoDaImportacao = .falha("O computador não tem nenhuma dessas chaves no cofre.")
+            } else {
+                var texto = "Importado do computador: " + entraram.joined(separator: " e ") + "."
+                if !resposta.faltando.isEmpty {
+                    texto += " Ficou de fora: " + resposta.faltando.joined(separator: ", ") + "."
+                }
+                resultadoDaImportacao = .sucesso(texto)
+            }
+        } catch {
+            resultadoDaImportacao = .falha(error.localizedDescription)
         }
     }
 

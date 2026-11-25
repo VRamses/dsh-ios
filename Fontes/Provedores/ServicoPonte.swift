@@ -59,6 +59,12 @@ struct SaudeDaPonte: Equatable {
     var detalhe: String?
 }
 
+/// O que a ponte devolveu quando o app pediu as chaves do cofre da máquina.
+struct ChavesImportadas {
+    var chaves: [String: String]
+    var faltando: [String]
+}
+
 final class ServicoPonte: ProvedorDeConversa {
     private let endereco: String
     private let token: String
@@ -91,6 +97,36 @@ final class ServicoPonte: ProvedorDeConversa {
 
     var temToken: Bool {
         !token.isEmpty
+    }
+
+    /// Traz do cofre da máquina da ponte as chaves que já estão lá.
+    ///
+    /// O endpoint `POST /v1/credenciais/llm/exportar` existe para transportar
+    /// chave de motor entre instâncias e exige o cabeçalho `x-ponte-exportar: 1`
+    /// de propósito: assim o valor não sai numa leitura distraída. O `Bearer`
+    /// continua sendo o token da ponte, o mesmo que a conversa já usa, então
+    /// nada precisa ser configurado a mais para importar.
+    ///
+    /// Nenhum valor desta resposta é impresso em log: só o nome das chaves
+    /// aparece nas mensagens da tela.
+    func importarChaves(nomes: [String]) async throws -> ChavesImportadas {
+        guard !nomes.isEmpty else { return ChavesImportadas(chaves: [:], faltando: []) }
+        let (objeto, _) = try await pedir(
+            "/v1/credenciais/llm/exportar",
+            metodo: "POST",
+            corpo: ["chaves": nomes],
+            cabecalhos: ["x-ponte-exportar": "1"]
+        )
+        let raiz = objeto as? [String: Any] ?? [:]
+        let recebidas = raiz["chaves"] as? [String: Any] ?? [:]
+        var limpas: [String: String] = [:]
+        for (nome, bruto) in recebidas {
+            guard let valor = bruto as? String else { continue }
+            let semEspaco = valor.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !semEspaco.isEmpty { limpas[nome] = semEspaco }
+        }
+        let faltando = (raiz["faltando"] as? [String]) ?? nomes.filter { limpas[$0] == nil }
+        return ChavesImportadas(chaves: limpas, faltando: faltando)
     }
 
     func listarSessoes() async throws -> [SessaoResumo] {
@@ -290,7 +326,8 @@ final class ServicoPonte: ProvedorDeConversa {
     private func pedir(
         _ caminho: String,
         metodo: String = "GET",
-        corpo: [String: Any]? = nil
+        corpo: [String: Any]? = nil,
+        cabecalhos: [String: String] = [:]
     ) async throws -> (Any, Int) {
         guard let url = url(caminho) else { throw ErroDaConversa.enderecoInvalido }
         guard !token.isEmpty else { throw ErroDaConversa.semToken }
@@ -300,6 +337,9 @@ final class ServicoPonte: ProvedorDeConversa {
         requisicao.timeoutInterval = 60
         requisicao.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         requisicao.setValue("application/json", forHTTPHeaderField: "Accept")
+        for (nome, valor) in cabecalhos {
+            requisicao.setValue(valor, forHTTPHeaderField: nome)
+        }
         if let corpo {
             requisicao.setValue("application/json", forHTTPHeaderField: "Content-Type")
             requisicao.httpBody = try JSONSerialization.data(withJSONObject: corpo)
