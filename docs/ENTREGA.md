@@ -141,14 +141,22 @@ Caminho A, Sideloadly (recomendado para a primeira instalação):
 Caminho B, AltStore (para quem quer renovação automática):
 
 1. Instale o iTunes pelo site da Apple (o da Microsoft Store não serve) e o AltServer no PC.
-2. Ligue o iPhone por cabo, confie no computador, e rode o AltServer com o aparelho conectado.
-3. No AltServer, escolha "Install AltStore" e informe a conta Apple. Ele instala o AltStore no
-   aparelho e usa a mesma conta para assinar os apps que você instalar por ele.
-4. Autorize o perfil de desenvolvedor como no passo 6 do caminho A, e ligue o Modo de
+   O AltServer 1.8.4 pede também o iCloud for Windows, do site da Apple.
+2. Ligue o iPhone por cabo, desbloqueie, e toque em "Confiar neste computador" no aparelho.
+3. Abra o iTunes uma vez e entre com a conta Apple, para o aparelho aparecer e o "Sincronizar
+   por Wi-Fi" ficar disponível, que é o que deixa a renovação acontecer sem cabo.
+4. Rode o AltServer como administrador, clique no ícone dele na bandeja, escolha "Install
+   AltStore" e o seu aparelho.
+5. Informe a conta Apple. Conta com dois fatores pede **senha de app**, gerada em
+   appleid.apple.com, e não a senha normal da conta.
+6. Autorize o perfil de desenvolvedor como no passo 6 do caminho A, e ligue o Modo de
    Desenvolvedor como no passo 4.
-5. No iPhone, abra o AltStore, aba My Apps, toque em "+" e escolha `DSH-livre.ipa` que você
-   mandou para o aparelho (AirDrop, Arquivos ou iCloud Drive).
-6. Deixe o AltServer aberto no PC e o iPhone na mesma rede de vez em quando: ele renova a
+7. Leve o `DSH-livre.ipa` para o aparelho. Não existe AirDrop no Windows; os caminhos que
+   funcionam são mandar o arquivo para você mesmo por e-mail ou mensageiro, o iCloud Drive, ou
+   servir o arquivo pelo PC na mesma rede Wi-Fi e baixar pelo Safari (um
+   `python -m http.server` na pasta do IPA resolve, e o Safari salva em Arquivos).
+8. No iPhone, abra o AltStore, aba My Apps, toque em "+" e escolha o `DSH-livre.ipa` baixado.
+9. Deixe o AltServer aberto no PC e o iPhone na mesma rede de vez em quando: ele renova a
    assinatura antes dos 7 dias vencerem.
 
 O que o pacote livre perde em relação ao completo: o widget mostrar a última conversa e o
