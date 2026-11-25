@@ -84,7 +84,7 @@ final class ConversaViewModel: ObservableObject {
     @MainActor
     func enviar(_ texto: String, anexos: [Anexo]) {
         let limpo = texto.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !limpo.isEmpty, !estaRespondendo else { return }
+        guard !limpo.isEmpty || !anexos.isEmpty, !estaRespondendo else { return }
         erro = nil
         estaRespondendo = true
         textoAoVivo = ""
@@ -201,7 +201,8 @@ final class ConversaViewModel: ObservableObject {
         guard let apiKey = try? CofreDeChaves.ler(ChaveDoCofre.apiKeyDeepSeek),
               !apiKey.isEmpty
         else { return nil }
-        return ServicoDeepSeek(apiKey: apiKey)
+        let servico = ServicoDeepSeek(apiKey: apiKey, modelo: modelo)
+        return servico
     }
 
     // MARK: - Sessões da ponte

@@ -21,7 +21,7 @@ struct BlocoDeCodigo: View {
                     .foregroundStyle(Cores.textoFraco)
                     .lineLimit(1)
                 Spacer(minLength: Espaco.s)
-                Button(action: copiar) {
+                Button(action: { copiar() }) {
                     Image(systemName: copiado ? "checkmark" : "doc.on.doc")
                         .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(copiado ? Cores.sucesso : Cores.textoFraco)

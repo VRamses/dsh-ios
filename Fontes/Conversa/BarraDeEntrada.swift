@@ -100,7 +100,7 @@ struct BarraDeEntrada: View {
                 itemDeMenu("DeepSeek raciocínio", marcado: sessaoAtual == nil && modeloAtual == "deepseek-reasoner")
             }
             Divider()
-            Button(action: aoEscolherSessao) {
+            Button(action: { aoEscolherSessao() }) {
                 itemDeMenu("Escolher sessão do DSH", marcado: sessaoAtual != nil)
             }
         } label: {
@@ -240,7 +240,13 @@ struct BarraDeEntrada: View {
     // MARK: - Enviar e parar
 
     private var botaoPrincipal: some View {
-        Button(action: estaRespondendo ? aoParar : aoEnviar) {
+        Button {
+            if estaRespondendo {
+                aoParar()
+            } else {
+                aoEnviar()
+            }
+        } label: {
             ZStack {
                 formaDoBotao
                     .frame(width: 40, height: 40)

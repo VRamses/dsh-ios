@@ -68,7 +68,7 @@ struct MenuLateral: View {
                 .font(Tipografia.titulo(22))
                 .foregroundStyle(Cores.texto)
             Spacer(minLength: Espaco.s)
-            Button(action: aoFechar) {
+            Button(action: { aoFechar() }) {
                 Image(systemName: "xmark")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Cores.textoFraco)
@@ -102,7 +102,7 @@ struct MenuLateral: View {
     }
 
     private var botaoDeNovaConversa: some View {
-        Button(action: aoNova) {
+        Button(action: { aoNova() }) {
             HStack(spacing: Espaco.s) {
                 Image(systemName: "square.and.pencil")
                     .font(.system(size: 14, weight: .semibold))
@@ -212,7 +212,7 @@ struct MenuLateral: View {
     }
 
     private var botaoDeSessoes: some View {
-        Button(action: aoAbrirSessoes) {
+        Button(action: { aoAbrirSessoes() }) {
             HStack(spacing: Espaco.s) {
                 Image(systemName: "server.rack")
                     .font(.system(size: 14, weight: .semibold))
