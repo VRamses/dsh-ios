@@ -1,0 +1,119 @@
+name: DSH
+
+options:
+  bundleIdPrefix: dev.ramses.dsh
+  createIntermediateGroups: true
+  deploymentTarget:
+    iOS: "18.0"
+  groupSortPosition: top
+  generateEmptyDirectories: true
+  xcodeVersion: "16.3"
+
+fileGroups:
+  - docs
+  - Recursos
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    SWIFT_STRICT_CONCURRENCY: minimal
+    IPHONEOS_DEPLOYMENT_TARGET: "18.0"
+    TARGETED_DEVICE_FAMILY: "1"
+    SUPPORTS_MACCATALYST: "NO"
+    GENERATE_INFOPLIST_FILE: "NO"
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    ENABLE_USER_SCRIPT_SANDBOXING: "NO"
+    CODE_SIGNING_ALLOWED: "NO"
+    CODE_SIGNING_REQUIRED: "NO"
+    CODE_SIGN_IDENTITY: ""
+    CODE_SIGN_STYLE: Manual
+    DEVELOPMENT_TEAM: ""
+    PROVISIONING_PROFILE_SPECIFIER: ""
+
+targets:
+  DSH:
+    type: application
+    platform: iOS
+    deploymentTarget: "18.0"
+    sources:
+      - path: Fontes/App
+        optional: true
+      - path: Fontes/Nucleo
+        optional: true
+      - path: Fontes/Provedores
+        optional: true
+      - path: Fontes/Compartilhado
+        optional: true
+      - path: Fontes/Desenho
+        optional: true
+      - path: Fontes/Conversa
+        optional: true
+      - path: Fontes/Artefatos
+        optional: true
+      - path: Fontes/Voz
+        optional: true
+      - path: Fontes/Ferramentas
+        optional: true
+      - path: Fontes/Plataforma
+        optional: true
+    settings:
+      base:
+        PRODUCT_NAME: DSH
+        PRODUCT_BUNDLE_IDENTIFIER: dev.ramses.dsh
+        INFOPLIST_FILE: Recursos/Info-App.plist
+        CODE_SIGN_ENTITLEMENTS: Recursos/DSH.entitlements
+        TARGETED_DEVICE_FAMILY: "1"
+    dependencies:
+      - target: DSHWidget
+        embed: true
+      - target: DSHCompartilhar
+        embed: true
+
+  DSHWidget:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "18.0"
+    sources:
+      - path: Fontes/Widget
+        optional: true
+      - path: Fontes/Compartilhado
+        optional: true
+    settings:
+      base:
+        PRODUCT_NAME: DSHWidget
+        PRODUCT_BUNDLE_IDENTIFIER: dev.ramses.dsh.widget
+        INFOPLIST_FILE: Recursos/Info-Widget.plist
+        CODE_SIGN_ENTITLEMENTS: Recursos/DSHWidget.entitlements
+        APPLICATION_EXTENSION_API_ONLY: "YES"
+        TARGETED_DEVICE_FAMILY: "1"
+
+  DSHCompartilhar:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "18.0"
+    sources:
+      - path: Fontes/Extensao
+        optional: true
+      - path: Fontes/Compartilhado
+        optional: true
+    settings:
+      base:
+        PRODUCT_NAME: DSHCompartilhar
+        PRODUCT_BUNDLE_IDENTIFIER: dev.ramses.dsh.compartilhar
+        INFOPLIST_FILE: Recursos/Info-Compartilhar.plist
+        CODE_SIGN_ENTITLEMENTS: Recursos/DSHCompartilhar.entitlements
+        APPLICATION_EXTENSION_API_ONLY: "YES"
+        TARGETED_DEVICE_FAMILY: "1"
+
+schemes:
+  DSH:
+    build:
+      targets:
+        DSH: all
+        DSHWidget: all
+        DSHCompartilhar: all
+    run:
+      config: Debug
+    archive:
+      config: Release

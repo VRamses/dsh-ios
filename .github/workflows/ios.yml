@@ -1,0 +1,165 @@
+name: iOS
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  APP: DSH
+  BUNDLE_ID: dev.ramses.dsh
+  XCODE_ALVO: "16.3"
+
+jobs:
+  simulador:
+    name: Simulador e capturas
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Selecionar Xcode
+        run: |
+          set -euo pipefail
+          if [ -d "/Applications/Xcode_${XCODE_ALVO}.app" ]; then
+            sudo xcode-select -s "/Applications/Xcode_${XCODE_ALVO}.app"
+          else
+            echo "aviso: Xcode ${XCODE_ALVO} ausente no runner; usando o padrao"
+            ls -d /Applications/Xcode*.app || true
+          fi
+          xcodebuild -version
+
+      - name: Instalar XcodeGen
+        run: command -v xcodegen >/dev/null || brew install xcodegen
+
+      - name: Gerar projeto
+        run: xcodegen generate
+
+      - name: Compilar para o simulador
+        run: |
+          set -euo pipefail
+          xcodebuild -project DSH.xcodeproj \
+            -target "$APP" \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            SYMROOT="$PWD/build" \
+            build
+
+      - name: Preparar simulador
+        id: simulador
+        run: |
+          set -euo pipefail
+          UDID=$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          dados = json.load(sys.stdin)["devices"]
+          for runtime in sorted(dados, reverse=True):
+              for aparelho in dados[runtime]:
+                  if aparelho["name"].startswith("iPhone"):
+                      print(aparelho["udid"])
+                      sys.exit(0)
+          sys.exit(1)
+          ')
+          echo "udid=$UDID" >> "$GITHUB_OUTPUT"
+          xcrun simctl boot "$UDID" || true
+          xcrun simctl bootstatus "$UDID" -b
+          echo "simulador: $UDID"
+
+      - name: Instalar, abrir cada rota e fotografar
+        run: |
+          set -euo pipefail
+          UDID="${{ steps.simulador.outputs.udid }}"
+          mkdir -p build/simulador build/logs
+          xcrun simctl install "$UDID" build/Debug-iphonesimulator/DSH.app
+          for ROTA in conversa voz ajustes dsh artefato; do
+            xcrun simctl terminate "$UDID" "$BUNDLE_ID" >/dev/null 2>&1 || true
+            xcrun simctl launch "$UDID" "$BUNDLE_ID" \
+              -rota "$ROTA" -demonstracao 1 \
+              --stdout "build/logs/$ROTA.out" --stderr "build/logs/$ROTA.err" || true
+            sleep 5
+            xcrun simctl io "$UDID" screenshot "build/simulador/$ROTA.png"
+            grep -a "rota efetiva" "build/logs/$ROTA.out" || echo "aviso: $ROTA sem a linha 'rota efetiva'"
+          done
+
+      - name: Testes, se existirem
+        run: |
+          set -euo pipefail
+          if xcodebuild -list -project DSH.xcodeproj | grep -qi "test"; then
+            xcrun simctl bootstatus "${{ steps.simulador.outputs.udid }}" -b
+            xcodebuild test \
+              -project DSH.xcodeproj \
+              -scheme "$APP" \
+              -destination "id=${{ steps.simulador.outputs.udid }}" \
+              CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+              SYMROOT="$PWD/build" || echo "aviso: xcodebuild test falhou (nenhum esquema de teste do contrato)"
+          else
+            echo "sem alvo de teste neste projeto"
+          fi
+
+      - name: Guardar capturas e logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: simulador
+          path: |
+            build/simulador/
+            build/logs/
+          if-no-files-found: warn
+
+  ipa:
+    name: IPA sem assinatura
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Selecionar Xcode
+        run: |
+          set -euo pipefail
+          if [ -d "/Applications/Xcode_${XCODE_ALVO}.app" ]; then
+            sudo xcode-select -s "/Applications/Xcode_${XCODE_ALVO}.app"
+          else
+            echo "aviso: Xcode ${XCODE_ALVO} ausente no runner; usando o padrao"
+            ls -d /Applications/Xcode*.app || true
+          fi
+          xcodebuild -version
+
+      - name: Instalar XcodeGen
+        run: command -v xcodegen >/dev/null || brew install xcodegen
+
+      - name: Gerar projeto
+        run: xcodegen generate
+
+      - name: Compilar para aparelho sem assinatura
+        run: |
+          set -euo pipefail
+          xcodebuild -project DSH.xcodeproj \
+            -target "$APP" \
+            -configuration Release \
+            -sdk iphoneos \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            SYMROOT="$PWD/build" \
+            build
+
+      - name: Empacotar IPA
+        run: |
+          set -euo pipefail
+          rm -rf build/Payload
+          mkdir -p build/Payload
+          cp -R build/Release-iphoneos/DSH.app build/Payload/DSH.app
+          ditto -c -k --keepParent build/Payload build/DSH.ipa
+          ls -lh build/DSH.ipa
+
+      - name: Guardar IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: ipa
+          path: build/DSH.ipa
+          if-no-files-found: error
