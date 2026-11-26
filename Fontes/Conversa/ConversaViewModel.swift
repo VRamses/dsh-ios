@@ -66,8 +66,12 @@ final class ConversaViewModel: ObservableObject {
 
     @MainActor
     func abrir(_ conversa: Conversa?) {
+        // A faixa de erro sobrevive a sair e voltar na mesma conversa: o motivo da
+        // falha é justamente o que o usuário vai querer reler depois de conferir os
+        // Ajustes. Só trocar de conversa limpa o aviso.
+        let mesmaConversa = self.conversa?.id == conversa?.id
         self.conversa = conversa
-        erro = nil
+        if !mesmaConversa { erro = nil }
     }
 
     @MainActor

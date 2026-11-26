@@ -351,7 +351,9 @@ final class ServicoPonte: ProvedorDeConversa {
 
     private func sessaoAtual() throws -> String {
         guard let sessaoID, !sessaoID.isEmpty else {
-            throw ErroDaConversa.rede("nenhuma sessão da ponte está aberta")
+            throw ErroDaConversa.rede(
+                "o motor da ponte precisa de uma sessão do DSH escolhida. Toque no nome do modelo na barra de baixo e escolha \"Escolher sessão do DSH\"."
+            )
         }
         return sessaoID
     }

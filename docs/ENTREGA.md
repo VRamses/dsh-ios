@@ -260,12 +260,45 @@ do app, porque isso é link, não dado compartilhado.
 | Sideloadly para em 0% com `Can't listdir a file` | o zip do IPA não tem `Payload/` como pasta raiz | gerar o pacote pelo workflow atual, que confere a raiz |
 | "Importar chaves do computador" responde que o computador não tem as chaves | o cofre do PC não tem aquele nome, ou a ponte está com a escrita desligada | conferir o cofre da máquina e o `permitirEscrita` do `ponte.json` |
 | erro de rede no motor da ponte | Tailscale fora, computador desligado, endereço sem `https://` | conferir o tailnet e o endereço salvo nos Ajustes |
-| a conversa não responde nada e não aparece faixa de erro | a chave não chegou ao cofre, ou chegou uma resposta 200 sem texto | abrir Ajustes e tocar em "Testar a chave", que mostra o código HTTP e o começo do corpo |
+| a conversa não responde nada e não aparece faixa de erro | a chave não chegou ao cofre, ou chegou uma resposta 200 sem texto | no build de 25/11/2026 posterior ao commit `e7202e8` isso deixou de acontecer: ou vem texto, ou vem faixa dizendo o que faltou |
 | a câmera lê o QR mas o app não abre os Ajustes | link sem o esquema `dsh://`, ou app instalado sem o `CFBundleURLSchemes` deste build | conferir se o QR começa com `dsh://ajustes?parear=` e instalar o build de 25/11/2026 ou mais novo |
 | o QR dá código inválido | o código vale uma vez só, por cinco minutos, e o pareamento anterior já o consumiu | gerar outro QR no computador: `node _tmp\ponte\qr-pareamento.mjs` |
 | motor direto responde 401 | chave da API errada ou revogada | colar a chave de novo em Ajustes |
 | widget abre mas não mostra conversa | App Group indisponível na conta gratuita | comportamento esperado, ver item 4 |
 | captura de tela em branco no artefato | a rota não existe ou o app não chegou a abrir | ler o `console.txt` e o log de compilação |
+
+### O print sem resposta, de 25/11/2026 às 22:26
+
+O print mostra duas falas do usuário ("Isso é um teste" e "Isso é um"), nenhuma
+resposta, nenhuma faixa de erro, e a seta no canto da barra em vez do quadrado de
+parar. Cada um desses sinais foi conferido no código e no que a máquina registrou:
+
+| o que o print mostra | como foi lido | o que prova |
+|---|---|---|
+| seta, e não quadrado | `BarraDeEntrada.swift`, `botaoPrincipal`: o glifo é `stop.fill` quando `estaRespondendo` é verdadeiro e `arrow.up` quando é falso | o pedido já tinha terminado quando o print foi tirado |
+| nenhuma linha "Escrevendo" e nenhum cartão de raciocínio | `BolhaDeMensagem.swift`: com a resposta ao vivo e texto vazio, a bolha mostra `trabalhoEmCurso` | não havia pedido em andamento |
+| rótulo "DeepSeek raciocínio" na barra | `BarraDeEntrada.swift`, `rotuloDoModelo`: "Sessão DSH" quando há sessão escolhida | nenhuma sessão do DSH estava selecionada, então não era o motor da ponte por escolha |
+| `ponte.log` das 22:24 às 22:35 | pareamento às 22:24:59 e 22:25:24, `GET /v1/saude` 200 às 22:25:32, e nenhum `POST /v1/sessoes/.../mensagem` perto das 22:26 | a mensagem do aparelho não passou pela ponte |
+| os três `POST` de 22:32:00, 22:32:07 e 22:34:21 | foram para a sessão `48647d58`, "Rebobina": o transcrito dela (3.471 quadros, 6.397 linhas) não tem "Isso é um" em lugar nenhum | aqueles pedidos não eram os do aparelho |
+| o mesmo pedido feito daqui | `deepseek-reasoner`, com `stream`, `max_tokens` 4096 e `stream_options` | HTTP 200, 81 linhas de SSE, texto e raciocínio presentes, servido por `deepseek-flash`: rota e nome de modelo estão certos |
+
+Sobrou então o motor direto, e nele toda falha previsível aparecia: chave faltando,
+chave recusada, rede fora e HTTP de erro desembocam em `ErroDaConversa`, que sempre
+tem descrição em português e vira faixa na tela. As duas únicas saídas caladas
+estavam no próprio app, e as duas foram corrigidas no commit `e7202e8`:
+
+- um 200 que termina sem nenhum pedaço de texto: `ServicoDeepSeek` agora conta os
+  pedaços e lança erro se não veio nenhum, e `ServicoPonte` faz o mesmo quando os
+  eventos fecham sem texto;
+- parada antes do primeiro pedaço: o `catch is CancellationError` era vazio e o
+  salvamento era condicionado a `!resposta.isEmpty || !pensamento.isEmpty`, então
+  parar cedo não deixava rastro. Agora o fim sem texto sempre vira faixa dizendo
+  que nada foi guardado.
+
+O que não dá para medir daqui: se o aparelho chegou a falar com a API naquele
+minuto, porque o app não guarda registro do último pedido. O build 2 do
+`project.yml` aparece em Ajustes como "1.0.0 (2)" e serve para saber qual app está
+no telefone.
 
 ## 7. Estado do repositório
 
