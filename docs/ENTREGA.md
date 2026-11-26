@@ -268,6 +268,51 @@ anteriores que entram nela são o `e7202e8` e o `c303ebd`.
 Para saber qual app está no telefone, Ajustes mostra a versão no rodapé: esta rodada é
 "1.0.0 (2)", e a anterior era "1.0.0 (1)".
 
+### A sexta instalação, no SUPERCOLLIDER, em 26/11/2026
+
+Esta é a rodada que ataca a resposta vazia do motor direto, com o commit `d04de27`.
+
+| o que | como foi medido | resultado |
+|---|---|---|
+| rodada do CI | `gh run view 45755780355`, commit `d04de27` | `success` nos dois jobs, 8 minutos e 35 segundos entre disparo e fim |
+| pacote entregue | artefato `ipa` da rodada, conferido com `zipfile` e `plistlib` | `DSH-livre.ipa` com 809.862 bytes e sha256 `259A1E797FC5C3607E949129EF0CD41F0D2911232CA1A862A96B0FEF892C56F2` |
+| conteúdo do pacote | mesmo conferidor | 15 entradas, nenhuma com `PlugIns`, `dev.ramses.dsh`, versão `1.0.0` (build `3`), mínimo 18.0 |
+| falas novas dentro do binário | procurar em UTF-8 no `Payload/DSH.app/DSH`, de 3.269.328 bytes | "a API recusou no meio do stream" e "primeiras linhas" presentes |
+| os trechos curtos da mesma frase | mesma procura | "Chave com " e "Resposta: " não aparecem como texto contínuo, e isso não é build velho: os trechos longos da mesma frase aparecem, e literal curto o Swift guarda embutido na instrução em vez de gravar como texto |
+| link de download | `curl -I` no endereço do tailnet | HTTP 200, `Content-Length: 809862`, `application/x-itunes-ipa` |
+| onde o arquivo está | `C:\Users\victo\iCloudDrive\DSH-livre-20261126-build3.ipa` e `_tmp\share\DSH-livre-20261126-build3.ipa` | mesmo sha256 nos dois, para o aparelho pegar pelo iCloud Drive ou pelo Safari no tailnet |
+
+#### Por que o 200 vinha sem nenhum pedaço de texto
+
+O palpite da rodada anterior era de rede ou de chave. As três medições abaixo, feitas daqui
+com o mesmo corpo de pedido que o app monta, trocam o palpite por causa:
+
+| pedido | cabeçalho de compressão | resposta |
+|---|---|---|
+| corpo do app, chave do cofre | `accept-encoding: identity` | `200`, `content-type: text/event-stream`, **sem** `content-encoding`, corpo legível linha a linha |
+| mesmo corpo, mesma chave | `accept-encoding: gzip, deflate, br` | `200`, `content-type: text/event-stream`, **`content-encoding: br`** |
+| mesmo corpo, chave inválida | `accept-encoding: identity` | `401` com corpo JSON, `Your api key: ****0000 is invalid` |
+
+Duas conclusões saem daí. A primeira: chave inválida devolve 401, então o 200 que o app
+recebeu significa que o pedido dele **passou pela autenticação**, e o problema estava no
+corpo. A segunda: a API passou a comprimir o stream quando o cliente aceita compressão, e o
+iOS aceita por padrão; o app lê o stream linha por linha e conta os pedaços, e byte comprimido
+não vira linha, então o pedido termina com 200 e contador em zero, que é exatamente a
+mensagem que aparecia na tela. O build 3 pede `identity` nos dois pedidos, o de conversa e o
+do teste da chave, e passa a mostrar as primeiras linhas cruas e o motivo quando o stream
+fecha sem texto.
+
+O 401 do teste da chave é outra história, e continua aberta: o texto que o aparelho recebeu
+foi `Authentication Fails (governor)`, e chave errada responde `Your api key: ****0000 is
+invalid`. São duas recusas diferentes, então não era a chave digitada errado. O teste do
+build 3 passou a informar quantos caracteres a chave tem e os quatro últimos dígitos, para a
+próxima medição separar chave com caractere invisível de barreira da conta.
+
+Depois de instalar, o teste é este, na ordem: Ajustes tem de mostrar "1.0.0 (3)" no rodapé;
+"Testar a chave" tem de dizer o tamanho da chave e os quatro últimos caracteres junto do
+HTTP; e uma conversa com "teste" tem de responder, ou então mostrar faixa com o motivo ou
+com as primeiras linhas cruas que a API mandou.
+
 ## 6. O que conferir quando algo não abre
 
 | sintoma | causa provável | o que fazer |
@@ -277,10 +322,12 @@ Para saber qual app está no telefone, Ajustes mostra a versão no rodapé: esta
 | Sideloadly para em 0% com `Can't listdir a file` | o zip do IPA não tem `Payload/` como pasta raiz | gerar o pacote pelo workflow atual, que confere a raiz |
 | "Importar chaves do computador" responde que o computador não tem as chaves | o cofre do PC não tem aquele nome, ou a ponte está com a escrita desligada | conferir o cofre da máquina e o `permitirEscrita` do `ponte.json` |
 | erro de rede no motor da ponte | Tailscale fora, computador desligado, endereço sem `https://` | conferir o tailnet e o endereço salvo nos Ajustes |
-| a conversa não responde nada e não aparece faixa de erro | a chave não chegou ao cofre, ou chegou uma resposta 200 sem texto | no build de 25/11/2026 posterior ao commit `e7202e8` isso deixou de acontecer: ou vem texto, ou vem faixa dizendo o que faltou |
+| a conversa não responde nada e não aparece faixa de erro | a chave não chegou ao cofre, ou chegou uma resposta 200 sem texto | no build 3 a faixa sempre aparece, com o motivo ou com as primeiras linhas cruas que a API mandou |
+| a faixa diz "a API recusou no meio do stream" | a API aceitou a conexão com 200 e recusou dentro do stream, e agora o texto dela aparece | ler a mensagem da faixa: ela é a recusa da própria API, sem tradução |
+| a faixa diz "200 e não mandou nenhum pedaço de texto" mesmo no build 3 | o stream chegou, mas em formato que o leitor não reconheceu | as primeiras linhas cruas na faixa dizem qual formato chegou; guardar esse texto antes de qualquer outra mudança |
 | a câmera lê o QR mas o app não abre os Ajustes | link sem o esquema `dsh://`, ou app instalado sem o `CFBundleURLSchemes` deste build | conferir se o QR começa com `dsh://ajustes?parear=` e instalar o build de 25/11/2026 ou mais novo |
 | o QR dá código inválido | o código vale uma vez só, por cinco minutos, e o pareamento anterior já o consumiu | gerar outro QR no computador: `node _tmp\ponte\qr-pareamento.mjs` |
-| motor direto responde 401 | chave da API errada ou revogada | colar a chave de novo em Ajustes |
+| motor direto responde 401 | chave errada, revogada, ou barreira da conta, que responde `Authentication Fails (governor)` em vez de `Your api key ... is invalid` | conferir o tamanho e os quatro últimos caracteres que o teste do build 3 informa, e colar a chave de novo em Ajustes |
 | widget abre mas não mostra conversa | App Group indisponível na conta gratuita | comportamento esperado, ver item 4 |
 | captura de tela em branco no artefato | a rota não existe ou o app não chegou a abrir | ler o `console.txt` e o log de compilação |
 
