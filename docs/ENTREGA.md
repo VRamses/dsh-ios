@@ -614,6 +614,7 @@ e a linha de estado acima é o que informa quando a ponte está marcada e a sess
 | conteúdo do pacote | mesmo conferidor | 15 entradas, nenhuma com `PlugIns`, `dev.ramses.dsh`, versão `1.0.0` (build `5`), mínimo 18.0 |
 | código novo dentro do binário | procurar em UTF-8 no `Payload/DSH.app/DSH`, de 3.545.088 bytes | `LeitorDeQR`, `qrcode.viewfinder`, `Ler QR do computador`, `PendenciaDeTela`, `abrirSessoes`, `marcarSessaoAberta`, `sessaoDaPonte` e `Respondendo pela ponte` presentes |
 | onde o arquivo está | `C:\Users\victo\iCloudDrive\DSH-livre-20261126-build5.ipa` e `_tmp\share\DSH-livre-20261126-build5.ipa` | mesmo sha256 nos dois |
+| link pelo tailnet | `curl -I` em `https://supercollider.tail056d02.ts.net:8444/DSH-livre-20261126-build5.ipa` | 200 com `Content-Length: 863872` e `Content-Type: application/x-itunes-ipa`; a porta 8444 repassa para o `python -m http.server 43141`, que serve `_tmp\share` e precisa estar de pé para o link valer |
 
 Ajustes passa a mostrar "1.0.0 (5)" no rodapé.
 
