@@ -314,10 +314,15 @@ final class ServicoPonte: ProvedorDeConversa {
                         }
                     }
                     // A sessão pode fechar os eventos sem mandar texto nenhum; sem
-                    // isso, a tela ficaria com a pergunta e mais nada.
+                    // isso, a tela ficaria com a pergunta e mais nada. A causa mais
+                    // comum é a sessão já estar respondendo no computador: o turno
+                    // acaba e o texto vai para a conversa que estava aberta, não
+                    // para cá.
                     if textoEmitido.isEmpty && raciocinioEmitido.isEmpty {
                         throw ErroDaConversa.rede(
-                            "a sessão do DSH fechou os eventos sem devolver texto"
+                            "a sessão do DSH fechou os eventos sem devolver texto."
+                                + " Se ela já estava respondendo no computador, crie uma"
+                                + " sessão nova: toque no nome do modelo e depois em Nova sessão."
                         )
                     }
                     continuacao.yield(.fim(motivo: nil))

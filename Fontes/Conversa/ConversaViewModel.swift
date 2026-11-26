@@ -161,6 +161,18 @@ final class ConversaViewModel: ObservableObject {
             gravar(papel: .usuario, texto: texto, raciocinio: nil, anexos: anexos, em: conversa)
         }
 
+        // Motor da ponte sem sessão escolhida: abre uma aqui.
+        //
+        // Antes o envio parava e mandava escolher uma sessão na lista, e a lista
+        // traz as sessões que já estão abertas no computador, inclusive a que está
+        // respondendo naquele momento. Mandar a pergunta para dentro de uma sessão
+        // ocupada devolve turno sem texto, que na tela vira "a sessão do DSH fechou
+        // os eventos sem devolver texto". Criando a sessão do iPhone, a pergunta cai
+        // numa conversa só dela, que responde.
+        if usaPonte && sessaoDaPonte == nil, let nova = await criarSessaoNoDsh() {
+            definirSessao(nova.id)
+        }
+
         guard let provedor = montarProvedor() else {
             estaRespondendo = false
             erro = usaPonte
