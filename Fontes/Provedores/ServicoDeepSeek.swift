@@ -79,19 +79,6 @@ final class ServicoDeepSeek: ProvedorDeConversa {
         requisicao.setValue("Bearer \(chaveDoPedido)", forHTTPHeaderField: "Authorization")
         requisicao.httpBody = try corpo(pedido: pedido, modelo: modelo)
 
-        let (bytes, resposta) = try await sessao.bytes(for: requisicao)
-        guard let http = resposta as? HTTPURLResponse else {
-            throw ErroDaConversa.rede("resposta sem HTTP")
-        }
-        guard http.statusCode == 200 else {
-            var corpoDoErro = ""
-            for try await linha in bytes.lines {
-                corpoDoErro += linha
-                if corpoDoErro.count > 400 { break }
-            }
-            throw ErroDaConversa.http(http.statusCode, corpoDoErro)
-        }
-
         var acumulador = AcumuladorDeSSE()
         var chamadas: [Int: (id: String, nome: String, argumentos: String)] = [:]
         var motivoFinal: String?
@@ -106,68 +93,96 @@ final class ServicoDeepSeek: ProvedorDeConversa {
         // Quantas linhas o stream entregou, reconhecidas ou não. É o número que
         // separa "o servidor não mandou nada" de "mandou algo que não foi lido".
         var linhasRecebidas = 0
+        var codigo = 0
+        var corpoDoErro = ""
+        var httpDaResposta: HTTPURLResponse?
 
-        for try await linha in bytes.lines {
-            linhasRecebidas += 1
-            if Task.isCancelled { throw CancellationError() }
-            guard let quadro = acumulador.consumir(linha: linha) else { continue }
-            if quadro.dados == "[DONE]" { break }
-            if cruas.count < 3, !quadro.dados.isEmpty {
-                cruas.append(String(quadro.dados.prefix(160)))
+        let leitor = LeitorDeLinhas()
+        lendo: for try await evento in leitor.abrir(requisicao, configuracao: sessao.configuration) {
+            if Task.isCancelled {
+                leitor.cancelar()
+                throw CancellationError()
             }
-            guard let dados = quadro.dados.data(using: .utf8),
-                  let raiz = (try? JSONSerialization.jsonObject(with: dados)) as? [String: Any]
-            else { continue }
+            switch evento {
+            case .cabecalho(let resposta):
+                httpDaResposta = resposta
+                codigo = resposta.statusCode
+            case .linha(let linha):
+                linhasRecebidas += 1
+                // Resposta que não é 200 não entra no leitor de quadro: o motivo do
+                // erro vem no corpo e é ele que a tela mostra.
+                if codigo != 200 {
+                    if corpoDoErro.count < 400 { corpoDoErro += linha }
+                    continue
+                }
+                guard let quadro = acumulador.consumir(linha: linha) else { continue }
+                if quadro.dados == "[DONE]" { break lendo }
+                if cruas.count < 3, !quadro.dados.isEmpty {
+                    cruas.append(String(quadro.dados.prefix(160)))
+                }
+                guard let dados = quadro.dados.data(using: .utf8),
+                      let raiz = (try? JSONSerialization.jsonObject(with: dados)) as? [String: Any]
+                else { continue }
 
-            // A API também recusa dentro de um stream que já começou com 200, e o
-            // motivo vem neste campo. Antes ele era descartado.
-            if let erro = raiz["error"] as? [String: Any],
-               let mensagem = erro["message"] as? String {
-                throw ErroDaConversa.rede("a API recusou no meio do stream: \(mensagem)")
-            }
+                // A API também recusa dentro de um stream que já começou com 200, e o
+                // motivo vem neste campo. Antes ele era descartado.
+                if let erro = raiz["error"] as? [String: Any],
+                   let mensagem = erro["message"] as? String {
+                    throw ErroDaConversa.rede("a API recusou no meio do stream: \(mensagem)")
+                }
 
-            if let escolhas = raiz["choices"] as? [[String: Any]], let primeira = escolhas.first {
-                if let delta = primeira["delta"] as? [String: Any] {
-                    if let raciocinio = delta["reasoning_content"] as? String, !raciocinio.isEmpty {
-                        pedacos += 1
-                        emitir(.raciocinio(raciocinio))
-                    }
-                    if let texto = delta["content"] as? String, !texto.isEmpty {
-                        pedacos += 1
-                        emitir(.texto(texto))
-                    }
-                    if let ferramentas = delta["tool_calls"] as? [[String: Any]] {
-                        for item in ferramentas {
-                            let indice = item["index"] as? Int ?? 0
-                            let funcao = item["function"] as? [String: Any] ?? [:]
-                            var atual = chamadas[indice] ?? (
-                                id: item["id"] as? String ?? "chamada-\(indice)",
-                                nome: "",
-                                argumentos: ""
-                            )
-                            if let identificador = item["id"] as? String, !identificador.isEmpty {
-                                atual.id = identificador
+                if let escolhas = raiz["choices"] as? [[String: Any]], let primeira = escolhas.first {
+                    if let delta = primeira["delta"] as? [String: Any] {
+                        if let raciocinio = delta["reasoning_content"] as? String, !raciocinio.isEmpty {
+                            pedacos += 1
+                            emitir(.raciocinio(raciocinio))
+                        }
+                        if let texto = delta["content"] as? String, !texto.isEmpty {
+                            pedacos += 1
+                            emitir(.texto(texto))
+                        }
+                        if let ferramentas = delta["tool_calls"] as? [[String: Any]] {
+                            for item in ferramentas {
+                                let indice = item["index"] as? Int ?? 0
+                                let funcao = item["function"] as? [String: Any] ?? [:]
+                                var atual = chamadas[indice] ?? (
+                                    id: item["id"] as? String ?? "chamada-\(indice)",
+                                    nome: "",
+                                    argumentos: ""
+                                )
+                                if let identificador = item["id"] as? String, !identificador.isEmpty {
+                                    atual.id = identificador
+                                }
+                                if let nome = funcao["name"] as? String, !nome.isEmpty {
+                                    atual.nome = nome
+                                }
+                                if let argumentos = funcao["arguments"] as? String {
+                                    atual.argumentos += argumentos
+                                }
+                                chamadas[indice] = atual
                             }
-                            if let nome = funcao["name"] as? String, !nome.isEmpty {
-                                atual.nome = nome
-                            }
-                            if let argumentos = funcao["arguments"] as? String {
-                                atual.argumentos += argumentos
-                            }
-                            chamadas[indice] = atual
                         }
                     }
+                    if let motivo = primeira["finish_reason"] as? String {
+                        motivoFinal = motivo
+                    }
                 }
-                if let motivo = primeira["finish_reason"] as? String {
-                    motivoFinal = motivo
-                }
-            }
 
-            if let uso = raiz["usage"] as? [String: Any] {
-                let entrada = uso["prompt_tokens"] as? Int ?? 0
-                let saida = uso["completion_tokens"] as? Int ?? 0
-                emitir(.uso(entrada: entrada, saida: saida))
+                if let uso = raiz["usage"] as? [String: Any] {
+                    let entrada = uso["prompt_tokens"] as? Int ?? 0
+                    let saida = uso["completion_tokens"] as? Int ?? 0
+                    emitir(.uso(entrada: entrada, saida: saida))
+                }
             }
+        }
+
+        // A recusa fora do 200 é lida até o fim do corpo e o erro sai aqui, depois
+        // que a resposta terminou, e não no meio do stream.
+        if codigo != 0 && codigo != 200 {
+            throw ErroDaConversa.http(codigo, corpoDoErro)
+        }
+        guard codigo == 200 else {
+            throw ErroDaConversa.rede("resposta sem HTTP")
         }
 
         // Chamada sem nome não vira fragmento nenhum, então ela também conta como
@@ -187,8 +202,8 @@ final class ServicoDeepSeek: ProvedorDeConversa {
             // Cabeçalhos e contagem de linhas entram no erro porque são a única
             // pista disponível no aparelho: sem eles, "200 sem pedaço" não diz se
             // o corpo veio vazio ou veio comprimido.
-            let comprimido = http.value(forHTTPHeaderField: "Content-Encoding") ?? "nenhuma"
-            let tipoDoCorpo = http.value(forHTTPHeaderField: "Content-Type") ?? "sem tipo"
+            let comprimido = httpDaResposta?.value(forHTTPHeaderField: "Content-Encoding") ?? "nenhuma"
+            let tipoDoCorpo = httpDaResposta?.value(forHTTPHeaderField: "Content-Type") ?? "sem tipo"
             throw ErroDaConversa.rede(
                 "a API respondeu 200 e não mandou nenhum pedaço de texto\(motivo)\(mostra)"
                     + " (linhas: \(linhasRecebidas), corpo: \(tipoDoCorpo), codificação: \(comprimido))"
@@ -338,7 +353,6 @@ final class ServicoDeepSeek: ProvedorDeConversa {
         requisicao.httpMethod = "POST"
         requisicao.timeoutInterval = 60
         requisicao.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        requisicao.setValue("identity", forHTTPHeaderField: "Accept-Encoding")
         requisicao.setValue(valor, forHTTPHeaderField: cabecalho)
         let corpoPedido: [String: Any] = [
             "model": modelo,
