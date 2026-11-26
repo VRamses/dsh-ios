@@ -251,6 +251,23 @@ O que o pacote livre perde em relação ao completo: o widget mostrar a última 
 compartilhamento de texto de outro app para o DSH. O ícone do widget continua abrindo as rotas
 do app, porque isso é link, não dado compartilhado.
 
+### A quinta instalação, no SUPERCOLLIDER, em 25/11/2026
+
+Esta é a rodada que faz o app parar de ficar calado: o commit final é o `9fcd9a4`, e os dois
+anteriores que entram nela são o `e7202e8` e o `c303ebd`.
+
+| o que | como foi medido | resultado |
+|---|---|---|
+| rodada do CI | `gh run view 45739833908`, commit `9fcd9a4` | `success` nos dois jobs |
+| pacote entregue | baixar o artefato `ipa` da rodada e conferir o arquivo | `DSH-livre.ipa` com 809.510 bytes e sha256 `46710E20542EBE1CAD5DCC4AE58CE1A9FEC7D0CEC5808AE24C094C9694B8E1C8` |
+| conteúdo do pacote | `_tmp\dsh-ios\medir-ipa.py`, com `zipfile` e `plistlib` | 15 entradas, nenhuma com `PlugIns`, `dev.ramses.dsh`, versão `1.0.0` (build `2`), mínimo 18.0, com `NSCameraUsageDescription` e `NSPhotoLibraryUsageDescription` |
+| as quatro falas novas dentro do binário | procurar em UTF-8 no `Payload/DSH.app/DSH`, de 3.269.928 bytes | "não mandou nenhum pedaço de texto", "terminou a resposta sem mandar texto nenhum", "interrompida antes de chegar texto" e "Escolher sessão do DSH" presentes |
+| link de download | `curl -I` no endereço do tailnet | HTTP 200, `Content-Length: 809510`, `application/x-itunes-ipa` |
+| arquivo servido | `_tmp\share\DSH-livre-20261125-build2.ipa` | 809.510 bytes, ao lado do `DSH-livre-20261125-foto.ipa` de 808.012 bytes, que fica para voltar atrás se precisar |
+
+Para saber qual app está no telefone, Ajustes mostra a versão no rodapé: esta rodada é
+"1.0.0 (2)", e a anterior era "1.0.0 (1)".
+
 ## 6. O que conferir quando algo não abre
 
 | sintoma | causa provável | o que fazer |
