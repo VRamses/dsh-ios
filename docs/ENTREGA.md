@@ -719,6 +719,52 @@ do iPhone, e a troca entre dois computadores não foi exercitada com os dois lig
 provado é que o código compila nos dois jobs, que ele está dentro do binário e que as telas abrem no
 simulador.
 
+### A décima instalação, no SUPERCOLLIDER, em 26/11/2026
+
+Esta rodada ataca o erro que a tela mostrou às 17:41 de 26/11/2026, com o motor no DeepSeek direto:
+"Falha de rede: a API respondeu 200 e não mandou nenhum pedaço de texto". O app estava no build 6, e
+a frase saiu sem nenhum dos complementos que o build 3 já sabia escrever (motivo, primeiras linhas),
+o que significa zero quadro reconhecido, não texto truncado.
+
+| o que | como foi medido | resultado |
+|---|---|---|
+| mesmo corpo que o app monta, chave do cofre | `curl` com `Accept-Encoding: identity` | `200`, `text/event-stream`, **sem** `content-encoding`, 8 linhas e 4 com `data:` |
+| mesmo corpo e mesma chave | `curl` com `Accept-Encoding: gzip, deflate, br` | `200`, `content-encoding: br`, 8 linhas e **nenhuma** com `data:` |
+| corpo com `stream_options`, `temperature` e `max_tokens` | duas variantes acima | o corpo do app não muda a resposta: quem muda é o cabeçalho |
+| leitura do stream no app | `Fontes/Provedores/ServicoDeepSeek.swift`, build 6 | `sessao.bytes(for:)` seguido de `bytes.lines`, com `Accept-Encoding: identity` escrito à mão na requisição |
+
+A leitura dessas quatro linhas: o servidor comprime quando o cliente aceita compressão, e o
+`URLSession` cuida desse cabeçalho por conta própria, então o `identity` escrito à mão não sobrevive
+até a rede. Pior: `bytes(for:)` entrega o corpo como veio, sem descomprimir, mesmo quando foi o
+próprio `URLSession` quem pediu a compressão. O app recebia brotli, o leitor de linhas não achava
+nenhum `data:` e o contador de pedaços fechava em zero. A correção da rodada anterior, que só trocou
+o cabeçalho, não podia funcionar por isso.
+
+| o que mudou | onde | por quê |
+|---|---|---|
+| leitura por delegação do `URLSession` | `Fontes/Provedores/LeitorDeLinhas.swift`, novo | a delegação recebe `didReceive data` já descomprimido pelo sistema, que é o único jeito de ler SSE comprimido sem trazer biblioteca de brotli para dentro do app |
+| o leitor entrega cabeçalho e linha | mesmo arquivo, `EventoDoCorpo` | a resposta fora do 200 é decidida com o código HTTP em mãos, e o corpo do erro é lido até o fim antes de virar exceção |
+| erro com pistas | `ServicoDeepSeek.swift` | o 200 sem texto passou a dizer quantas linhas chegaram, o `Content-Type` e o `Content-Encoding`, que é o que separa corpo vazio de corpo comprimido na próxima vez |
+| o `identity` saiu dos dois pedidos | conversa e teste da chave | deixar o `URLSession` negociar é o que garante a descompressão |
+
+#### A conta do que mudou
+
+| o que | como foi medido | resultado |
+|---|---|---|
+| rodada do CI | `gh run view 45894639199`, commit `29c443b` | `success` nos dois jobs; a rodada `45893140844`, do commit `cfee370`, ficou superseded por esta |
+| pacote entregue | artefato `ipa` da rodada, conferido com `zipfile` e `plistlib` | `DSH-livre.ipa` com 930.735 bytes e sha256 `B37866ED53EB983BA844BDDF309229CBFDB7EE5894637B3D1AAB8147634611DD` |
+| conteúdo do pacote | mesmo conferidor | 15 entradas, nenhuma com `PlugIns`, `dev.ramses.dsh`, versão `1.0.0` build `7`, mínimo 18.0 |
+| binário | tamanho de `Payload/DSH.app/DSH` | 3.795.976 bytes, 20.608 a mais que o build 6, que é o leitor novo |
+| onde o arquivo está | `C:\Users\victo\iCloudDrive\DSH-livre-20261126-build7.ipa` e `_tmp\share\DSH-livre-20261126-build7.ipa` | mesmo sha256 nos dois |
+| link pelo tailnet | `curl -I` em `https://supercollider.tail056d02.ts.net:8444/DSH-livre-20261126-build7.ipa` | 200, `Content-Length: 930735`, `application/x-itunes-ipa` |
+
+Depois de instalar, Ajustes tem de mostrar "1.0.0 (7)" no rodapé, e a conversa com o motor DeepSeek
+direto tem de responder. Se voltar a falhar, a faixa agora carrega a contagem de linhas e a
+codificação, e é essa linha que diz se o corpo veio vazio ou comprimido.
+
+O que esta rodada **não** prova: nada foi instalado no aparelho ainda. A prova é de compilação nos
+dois jobs, de conteúdo do pacote e da medição da API feita daqui com a mesma chave e o mesmo corpo.
+
 ## 11. O que fica aberto
 
 O que está abaixo é conhecido e não escondido. Nenhum item impede usar o app no dia a dia, mas
@@ -736,6 +782,7 @@ cada um é uma promessa que o app ainda não cumpre.
 | instalação em iPhone físico | reinstalada em 25/11/2026 pelo Sideloadly com conta gratuita, com o build da gaveta, do teste de chave e do QR | a assinatura vence em 7 dias; renovar exige o Sideloadly com o PC e o iPhone na mesma rede |
 | pareamento por QR exercitado no aparelho | o caminho está provado no servidor (`POST /v1/pareamento` e `/v1/pareamento/trocar`, com código de uso único) e o build 5 traz o leitor dentro de Ajustes, com `AVCaptureMetadataOutput` e o mesmo `PedidoDePareamento` do link `dsh://` | falta ler um QR de verdade com a câmera do iPhone e ver o token cair no cofre; é o teste seguinte. O simulador do CI não tem QR nem câmera com imagem, então ele não fecha essa prova |
 | texto do pedido de câmera | resolvido no build 6: `NSCameraUsageDescription` cita a foto anexada e o QR de pareamento, e o pacote traz a frase nova em `Info.plist` | o alerta do sistema agora descreve as duas ações que usam a câmera |
+| resposta vazia do motor DeepSeek direto | tratado no build 7: o stream passou a ser lido pela delegação do `URLSession`, que descomprime, e o erro diz quantas linhas chegaram junto do `Content-Encoding` | falta confirmar no aparelho que a conversa responde; se não responder, a faixa do erro passa a nomear a causa |
 | troca entre dois computadores | a lista, o token por instância e o espelho para as preferências existem e a seção Computadores abre no simulador com um computador salvo | falta ter dois computadores com ponte de pé e alternar entre eles para ver a sessão de cada um carregar no aparelho; o simulador do CI não tem tailnet |
 | foto pela ponte | o motor DeepSeek direto recebe a foto de verdade, em base64; a ponte recebe só o texto reconhecido, e o pedido diz isso ao modelo | a ponte é transporte de texto e não tem rota de imagem; fazer a foto atravessar exigiria uma rota nova nela e um servidor que aceitasse o JPEG |
 | importar a chave de busca web | o cofre do PC não tem `TAVILY_API_KEY` nem `BRAVE_API_KEY` | criar uma chave gratuita na Tavily, gravar no cofre do PC e usar o botão de importar, ou colar direto em Ajustes |
