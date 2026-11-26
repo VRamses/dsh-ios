@@ -71,11 +71,11 @@ final class ServicoDeepSeek: ProvedorDeConversa {
         requisicao.timeoutInterval = 180
         requisicao.setValue("application/json", forHTTPHeaderField: "Content-Type")
         requisicao.setValue("text/event-stream", forHTTPHeaderField: "Accept")
-        // A resposta em streaming chega comprimida quando o cliente aceita
-        // compressão, e aí o leitor de linhas não reconhece quadro nenhum: o
-        // stream termina com 200 e zero pedaços. Pedir identidade mantém o texto
-        // puro, que é o formato do SSE.
-        requisicao.setValue("identity", forHTTPHeaderField: "Accept-Encoding")
+        // Não mexer no Accept-Encoding: quando o app define esse cabeçalho à mão, o
+        // URLSession para de descomprimir a resposta. Se o servidor comprimir de
+        // qualquer jeito, o leitor de linhas recebe bytes crus, não reconhece
+        // quadro nenhum e o stream termina em 200 com zero pedaços. Deixando o
+        // URLSession negociar, ele pede gzip e descomprime sozinho.
         requisicao.setValue("Bearer \(chaveDoPedido)", forHTTPHeaderField: "Authorization")
         requisicao.httpBody = try corpo(pedido: pedido, modelo: modelo)
 
@@ -103,8 +103,12 @@ final class ServicoDeepSeek: ProvedorDeConversa {
         // que chegou quando nada foi reconhecido, que é o caso em que a tela hoje
         // fica muda.
         var cruas: [String] = []
+        // Quantas linhas o stream entregou, reconhecidas ou não. É o número que
+        // separa "o servidor não mandou nada" de "mandou algo que não foi lido".
+        var linhasRecebidas = 0
 
         for try await linha in bytes.lines {
+            linhasRecebidas += 1
             if Task.isCancelled { throw CancellationError() }
             guard let quadro = acumulador.consumir(linha: linha) else { continue }
             if quadro.dados == "[DONE]" { break }
@@ -180,8 +184,14 @@ final class ServicoDeepSeek: ProvedorDeConversa {
         if pedacos == 0 && completas.isEmpty {
             let motivo = motivoFinal.map { " (motivo: \($0))" } ?? ""
             let mostra = cruas.isEmpty ? "" : " (primeiras linhas: \(cruas.joined(separator: " | ")))"
+            // Cabeçalhos e contagem de linhas entram no erro porque são a única
+            // pista disponível no aparelho: sem eles, "200 sem pedaço" não diz se
+            // o corpo veio vazio ou veio comprimido.
+            let comprimido = http.value(forHTTPHeaderField: "Content-Encoding") ?? "nenhuma"
+            let tipoDoCorpo = http.value(forHTTPHeaderField: "Content-Type") ?? "sem tipo"
             throw ErroDaConversa.rede(
                 "a API respondeu 200 e não mandou nenhum pedaço de texto\(motivo)\(mostra)"
+                    + " (linhas: \(linhasRecebidas), corpo: \(tipoDoCorpo), codificação: \(comprimido))"
             )
         }
         for chamada in completas {
