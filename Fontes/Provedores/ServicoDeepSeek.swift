@@ -63,7 +63,8 @@ final class ServicoDeepSeek: ProvedorDeConversa {
         emitir: (FragmentoDaResposta) -> Void
     ) async throws {
         guard let endereco else { throw ErroDaConversa.enderecoInvalido }
-        guard !apiKey.isEmpty else { throw ErroDaConversa.semChave }
+        let chaveDoPedido = chaveParaCabecalho(apiKey).chave
+        guard !chaveDoPedido.isEmpty else { throw ErroDaConversa.semChave }
 
         var requisicao = URLRequest(url: endereco)
         requisicao.httpMethod = "POST"
@@ -75,7 +76,7 @@ final class ServicoDeepSeek: ProvedorDeConversa {
         // stream termina com 200 e zero pedaços. Pedir identidade mantém o texto
         // puro, que é o formato do SSE.
         requisicao.setValue("identity", forHTTPHeaderField: "Accept-Encoding")
-        requisicao.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        requisicao.setValue("Bearer \(chaveDoPedido)", forHTTPHeaderField: "Authorization")
         requisicao.httpBody = try corpo(pedido: pedido, modelo: modelo)
 
         let (bytes, resposta) = try await sessao.bytes(for: requisicao)
@@ -301,45 +302,90 @@ final class ServicoDeepSeek: ProvedorDeConversa {
 
     // MARK: - Diagnóstico da chave
 
-    /// Pedido mínimo à API, sem streaming, só para a tela de Ajustes dizer o que
-    /// o telefone recebe de verdade. Devolve o código HTTP e o começo do corpo,
-    /// que é o que separa chave errada (401), modelo errado (400) e rede fora.
-    static func diagnosticar(chave: String, modelo: String) async -> String {
-        let limpa = chave.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !limpa.isEmpty else {
-            return "Nenhuma chave no cofre. Cole a chave ou importe do computador."
+    /// Devolve só o que pode viajar num cabeçalho HTTP, e quantos caracteres
+    /// saíram. Caractere fora do ASCII visível (BOM colado na frente, espaço de
+    /// largura zero, quebra de linha no meio) faz o iOS descartar o cabeçalho
+    /// `Authorization` inteiro no caminho: o pedido chega na API sem chave
+    /// nenhuma e a resposta é 401, como se o cofre estivesse vazio.
+    static func chaveParaCabecalho(_ bruto: String) -> (chave: String, removidos: Int) {
+        let filtrada = bruto.filter { caractere in
+            guard let ascii = caractere.asciiValue else { return false }
+            return ascii > 0x20 && ascii < 0x7F
         }
-        guard let endereco = URL(string: "https://api.deepseek.com/chat/completions") else {
-            return "Endereço da API inválido."
-        }
+        return (filtrada, bruto.count - filtrada.count)
+    }
 
+    /// Pedido mínimo à API usando o cabeçalho indicado, sem streaming.
+    private static func pedirTeste(
+        valor: String,
+        cabecalho: String,
+        modelo: String
+    ) async -> (status: Int, corpo: String) {
+        guard let endereco = URL(string: "https://api.deepseek.com/chat/completions") else {
+            return (0, "endereço da API inválido")
+        }
         var requisicao = URLRequest(url: endereco)
         requisicao.httpMethod = "POST"
         requisicao.timeoutInterval = 60
         requisicao.setValue("application/json", forHTTPHeaderField: "Content-Type")
         requisicao.setValue("identity", forHTTPHeaderField: "Accept-Encoding")
-        requisicao.setValue("Authorization", forHTTPHeaderField: "Bearer \(limpa)")
-
-        let corpo: [String: Any] = [
+        requisicao.setValue(valor, forHTTPHeaderField: cabecalho)
+        let corpoPedido: [String: Any] = [
             "model": modelo,
             "messages": [["role": "user", "content": "responda apenas: ok"]],
             "max_tokens": 16,
             "stream": false,
         ]
         do {
-            requisicao.httpBody = try JSONSerialization.data(withJSONObject: corpo)
+            requisicao.httpBody = try JSONSerialization.data(withJSONObject: corpoPedido)
             let (dados, resposta) = try await URLSession.shared.data(for: requisicao)
             let status = (resposta as? HTTPURLResponse)?.statusCode ?? 0
-            let texto = String(data: dados, encoding: .utf8) ?? ""
-            let inicio = texto
+            let texto = (String(data: dados, encoding: .utf8) ?? "")
                 .replacingOccurrences(of: "\n", with: " ")
-                .prefix(240)
-            // O tamanho e a ponta da chave entram no relatório porque chave com
-            // caractere invisível colado passa na tela e falha na API.
-            let ponta = limpa.count >= 4 ? String(limpa.suffix(4)) : limpa
-            return "HTTP \(status). Chave com \(limpa.count) caracteres, terminando em \(ponta). Resposta: \(inicio)"
+            return (status, String(texto.prefix(240)))
         } catch {
-            return "Não chegou a responder: \(error.localizedDescription)"
+            return (0, "não chegou a responder: \(error.localizedDescription)")
         }
+    }
+
+    /// Pedido mínimo à API, sem streaming, só para a tela de Ajustes dizer o que
+    /// o telefone recebe de verdade. Devolve o código HTTP e o começo do corpo,
+    /// que é o que separa chave errada (401), cabeçalho descartado (401 em
+    /// `Authorization` e 200 em `x-api-key`) e rede fora.
+    static func diagnosticar(chave: String, modelo: String) async -> String {
+        let aparada = chave.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !aparada.isEmpty else {
+            return "Nenhuma chave no cofre. Cole a chave ou importe do computador."
+        }
+        let (limpa, removidos) = chaveParaCabecalho(aparada)
+        guard !limpa.isEmpty else {
+            return "A chave guardada tem \(aparada.count) caracteres e nenhum serve num cabeçalho HTTP."
+        }
+        // O tamanho e a ponta entram no relatório porque chave com caractere
+        // invisível colado passa na tela e muda de comportamento no pedido.
+        let ponta = limpa.count >= 4 ? String(limpa.suffix(4)) : limpa
+        let ficha = "Chave com \(limpa.count) caracteres, terminando em \(ponta)"
+        let invisivel = removidos == 0
+            ? "nenhum caractere invisível"
+            : "\(removidos) caractere invisível removido"
+
+        let primeira = await pedirTeste(
+            valor: "Bearer \(limpa)",
+            cabecalho: "Authorization",
+            modelo: modelo
+        )
+        if primeira.status == 200 {
+            return "HTTP 200. \(ficha); \(invisivel). A chave vale."
+        }
+        // A API aceita a mesma chave em `x-api-key`. Se ali der 200, o problema
+        // não é a chave: foi o cabeçalho que o iOS descartou.
+        let segunda = await pedirTeste(valor: limpa, cabecalho: "x-api-key", modelo: modelo)
+        var relatorio = "HTTP \(primeira.status). \(ficha); \(invisivel). Resposta: \(primeira.corpo)."
+        if segunda.status == 200 {
+            relatorio += " Com x-api-key deu 200: o iOS descartou o cabeçalho Authorization."
+        } else {
+            relatorio += " Com x-api-key também falhou (HTTP \(segunda.status)): \(segunda.corpo)"
+        }
+        return relatorio
     }
 }

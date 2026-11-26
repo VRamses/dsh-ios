@@ -20,6 +20,7 @@ final class ConversaViewModel: ObservableObject {
 
     @Published private(set) var sessoes: [SessaoResumo] = []
     @Published private(set) var carregandoSessoes = false
+    @Published private(set) var criandoSessao = false
     @Published private(set) var erroDeSessoes: String?
 
     /// Sessão do DSH em uso, quando a ponte é o caminho da conversa.
@@ -279,6 +280,45 @@ final class ConversaViewModel: ObservableObject {
     }
 
     // MARK: - Sessões da ponte
+
+    /// Cria uma sessão nova no DSH pela ponte e devolve o resumo dela, pronto
+    /// para abrir. Antes disto o app só listava sessões: quem não tinha nenhuma
+    /// aberta no computador não tinha como começar uma conversa pelo iPhone.
+    @MainActor
+    func criarSessaoNoDsh() async -> SessaoResumo? {
+        guard let ponte else {
+            erroDeSessoes = "Sem ponte configurada. O endereço e o token da ponte do DSH ficam em Ajustes."
+            return nil
+        }
+        criandoSessao = true
+        erroDeSessoes = nil
+        defer { criandoSessao = false }
+        do {
+            let id = try await ponte.criarSessao()
+            await carregarSessoes()
+            if let achada = sessoes.first(where: { $0.id == id }) { return achada }
+            return SessaoResumo(
+                id: id,
+                curto: String(id.suffix(8)),
+                titulo: "Sessão nova",
+                rodando: false,
+                vazia: true,
+                cwd: nil,
+                atualizadoEm: nil,
+                contexto: 0,
+                tokens: nil,
+                turnos: 0,
+                seq: 0,
+                aberta: true,
+                arquivada: false,
+                grupo: nil,
+                grupoId: nil
+            )
+        } catch {
+            erroDeSessoes = error.localizedDescription
+            return nil
+        }
+    }
 
     @MainActor
     func carregarSessoes() async {

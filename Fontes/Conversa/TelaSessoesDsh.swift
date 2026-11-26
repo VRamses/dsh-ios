@@ -15,18 +15,21 @@ struct TelaSessoesDsh: View {
 
     var body: some View {
         NavigationStack {
-            Group {
-                if modelo.carregandoSessoes && modelo.sessoes.isEmpty {
-                    carregando
-                } else if let erro = modelo.erroDeSessoes, modelo.sessoes.isEmpty {
-                    falha(erro)
-                } else if modelo.sessoes.isEmpty {
-                    vazio
-                } else {
-                    lista
+            VStack(spacing: 0) {
+                botaoDeSessaoNova
+                Group {
+                    if modelo.carregandoSessoes && modelo.sessoes.isEmpty {
+                        carregando
+                    } else if let erro = modelo.erroDeSessoes, modelo.sessoes.isEmpty {
+                        falha(erro)
+                    } else if modelo.sessoes.isEmpty {
+                        vazio
+                    } else {
+                        lista
+                    }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .background(Cores.fundo)
             .navigationTitle("Sessões do DSH")
             .navigationBarTitleDisplayMode(.inline)
@@ -53,6 +56,41 @@ struct TelaSessoesDsh: View {
     }
 
     // MARK: - Estados
+
+    /// Cria uma sessão nova no DSH. É o caminho que faltava: o app listava as
+    /// sessões abertas no computador e não oferecia como começar uma do zero.
+    private var botaoDeSessaoNova: some View {
+        Button {
+            Task {
+                if let nova = await modelo.criarSessaoNoDsh() {
+                    aoAbrir(nova)
+                    fechar()
+                }
+            }
+        } label: {
+            HStack(spacing: Espaco.s) {
+                if modelo.criandoSessao {
+                    ProgressView()
+                        .tint(Cores.fundo)
+                } else {
+                    Image(systemName: "plus.circle.fill")
+                        .font(.system(size: 15, weight: .semibold))
+                }
+                Text(modelo.criandoSessao ? "Criando sessão" : "Nova sessão no DSH")
+                    .font(Tipografia.corpo())
+            }
+            .foregroundStyle(Cores.fundo)
+            .frame(maxWidth: .infinity)
+            .frame(height: 44)
+            .background(Cores.acento)
+            .clipShape(RoundedRectangle(cornerRadius: Raio.s, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .disabled(modelo.criandoSessao)
+        .padding(.horizontal, Espaco.l)
+        .padding(.top, Espaco.l)
+        .accessibilityLabel("Criar sessão nova no DSH")
+    }
 
     private var carregando: some View {
         VStack(spacing: Espaco.m) {
@@ -102,7 +140,7 @@ struct TelaSessoesDsh: View {
             Text("Nenhuma sessão aberta")
                 .font(Tipografia.titulo(19))
                 .foregroundStyle(Cores.texto)
-            Text("Abra o DSH no computador e comece uma conversa por lá. As sessões abertas aparecem aqui para você continuar no iPhone.")
+            Text("Toque em Nova sessão no DSH para começar uma conversa por aqui, ou abra uma conversa no computador e ela aparece nesta lista para você continuar no iPhone.")
                 .font(Tipografia.corpo())
                 .foregroundStyle(Cores.textoFraco)
                 .fixedSize(horizontal: false, vertical: true)
