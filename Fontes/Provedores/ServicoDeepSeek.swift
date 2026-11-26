@@ -89,6 +89,10 @@ final class ServicoDeepSeek: ProvedorDeConversa {
         var acumulador = AcumuladorDeSSE()
         var chamadas: [Int: (id: String, nome: String, argumentos: String)] = [:]
         var motivoFinal: String?
+        // Quantos pedaços chegaram de fato. Um 200 sem nenhum pedaço deixaria a
+        // conversa sem resposta e sem erro, e a tela em silêncio; por isso a conta
+        // existe e a falta vira erro no fim.
+        var pedacos = 0
 
         for try await linha in bytes.lines {
             if Task.isCancelled { throw CancellationError() }
@@ -101,9 +105,11 @@ final class ServicoDeepSeek: ProvedorDeConversa {
             if let escolhas = raiz["choices"] as? [[String: Any]], let primeira = escolhas.first {
                 if let delta = primeira["delta"] as? [String: Any] {
                     if let raciocinio = delta["reasoning_content"] as? String, !raciocinio.isEmpty {
+                        pedacos += 1
                         emitir(.raciocinio(raciocinio))
                     }
                     if let texto = delta["content"] as? String, !texto.isEmpty {
+                        pedacos += 1
                         emitir(.texto(texto))
                     }
                     if let ferramentas = delta["tool_calls"] as? [[String: Any]] {
@@ -145,6 +151,14 @@ final class ServicoDeepSeek: ProvedorDeConversa {
             emitir(.chamadaDeFerramenta(
                 ChamadaDeFerramenta(id: chamada.id, nome: chamada.nome, argumentos: chamada.argumentos)
             ))
+        }
+        // Nem texto, nem raciocínio, nem ferramenta: a tela não teria o que mostrar e
+        // o usuário veria a mensagem dele sozinha. Erro dito é melhor que silêncio.
+        if pedacos == 0 && chamadas.isEmpty {
+            let motivo = motivoFinal.map { " (motivo: \($0))" } ?? ""
+            throw ErroDaConversa.rede(
+                "a API respondeu 200 e não mandou nenhum pedaço de texto\(motivo)"
+            )
         }
         emitir(.fim(motivo: motivoFinal))
     }

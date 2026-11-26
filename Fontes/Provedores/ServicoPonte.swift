@@ -313,6 +313,13 @@ final class ServicoPonte: ProvedorDeConversa {
                             }
                         }
                     }
+                    // A sessão pode fechar os eventos sem mandar texto nenhum; sem
+                    // isso, a tela ficaria com a pergunta e mais nada.
+                    if textoEmitido.isEmpty && raciocinioEmitido.isEmpty {
+                        throw ErroDaConversa.rede(
+                            "a sessão do DSH fechou os eventos sem devolver texto"
+                        )
+                    }
                     continuacao.yield(.fim(motivo: nil))
                     continuacao.finish()
                 } catch {

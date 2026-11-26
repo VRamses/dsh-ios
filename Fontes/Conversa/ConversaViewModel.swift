@@ -179,7 +179,9 @@ final class ConversaViewModel: ObservableObject {
                 }
             }
         } catch is CancellationError {
-            // Cancelar não apaga o que já chegou: o parcial é o que vale.
+            // Cancelar não apaga o que já chegou: o parcial é o que vale. O caso de
+            // cancelar antes do primeiro pedaço é tratado depois do laço, junto com
+            // o do serviço que responde sem texto, porque os dois terminam aqui.
         } catch {
             erro = error.localizedDescription
         }
@@ -192,6 +194,12 @@ final class ConversaViewModel: ObservableObject {
                 anexos: [],
                 em: conversa
             )
+        } else if erro == nil {
+            // Fim sem nenhum pedaço de texto e sem erro: a tela mostraria a pergunta
+            // sozinha, e o usuário não teria como saber que nada veio. Dizer sempre.
+            erro = Task.isCancelled
+                ? "A resposta foi interrompida antes de chegar texto, então nada foi guardado. Envie de novo para tentar outra vez."
+                : "O serviço terminou a resposta sem mandar texto nenhum. Nada foi guardado; envie de novo para tentar outra vez."
         }
 
         textoAoVivo = ""
