@@ -62,6 +62,42 @@ referência de forma: cartão de entrada flutuante, folha modal para lista longa
 linha de lista com ação secundária em menu, estado vazio curto. Nada foi copiado:
 o projeto não aceita biblioteca de terceiro, e o contrato fixa os tipos.
 
+Na revisão de 26/11/2026 o catálogo foi consultado de novo, atrás de leitor de QR.
+As consultas gastaram o mesmo teto de 6 e voltaram só geradores de QR para React,
+React Native e Svelte (`panel-ui/qr-code`, `spell-ui/qr-code`, `chakra-ui/qr-code`,
+`ark-ui/qr-code`, `untitled-ui/qr-code`): nenhum lê câmera, nenhum é SwiftUI. O que
+foi aproveitado é a forma, que a própria Apple já fixa: moldura de mira, fundo
+preto, um alvo de 44 pt para fechar e a mensagem de erro logo abaixo da moldura.
+Nada foi instalado, e a folha de leitura é `AVCaptureMetadataOutput` puro.
+
+## A revisão de limpeza de 26/11/2026, na tela de Ajustes
+
+Alvo: `Fontes/Ajustes/TelaDeAjustes.swift` inteiro, mais a folha nova do leitor de
+QR. Não foram olhadas as telas irmãs (conversa, sessões, voz) nesta passada, e a
+tela não foi tocada no aparelho: o que se viu de desenho é a captura do simulador.
+
+O contador de sinais deu zero em todas as famílias, antes e depois das mudanças,
+o que é esperado: ele lê marcas como rótulo de olho, emoji, degradê e travessão, e
+não vê U3 a U8, U14, nem as regras de formulário e de estado. O achado daqui saiu
+de leitura.
+
+| # | onde | regra | o que estava | o que fazer |
+|---|---|---|---|---|
+| 1 | seção Motor | U9 e o teste do estado real | o seletor de Motor não tinha efeito visível: `configurar()` só usa a ponte quando há sessão escolhida, e a tela não dizia isso | feito no build 5: linha de estado com as três situações e botão que leva à escolha da sessão |
+| 2 | seção Ponte | formulários, "a ordem é a da conversa" | o único caminho para parear era sair do app e usar a câmera do sistema | feito no build 5: a seção começa com o leitor de QR |
+| 3 | parágrafos de apoio, 10 deles | U4, U5 e unslop 28 | cada seção explicava o produto em uma ou duas frases longas, e a de Motor chegou a 4 linhas | fica uma frase por seção, a que afirma um fato que o controle não mostra (o prefixo `sk-`, o `tvly-`, o endereço do tailnet); o resto sai |
+| 4 | campos de chave e de endereço | formulários, "rótulo sempre visível" e U7 | o rótulo era o placeholder, que some ao digitar; só o VoiceOver tinha rótulo | rótulo visível acima do campo e o exemplo embaixo, sem repetir o que o campo já diz |
+| 5 | seção Ponte | formulários, ordem | entre o campo do token e o botão que conclui a configuração havia dois parágrafos e um botão de teste | ordem: QR, endereço, token, testar, importar; os parágrafos do meio saem |
+| 6 | linha de estado do motor | acabamento | o ícone de 13 pt fica centralizado num alvo de 44 pt e desalinha da primeira linha do texto | alinhar o ícone ao topo do texto |
+
+O que se manteve de propósito: os dois botões "Salvar chave" e "Apagar chave" nas
+duas seções usam o mesmo verbo para a mesma ação; os alvos de toque ficam em 44 pt;
+o texto fraco sobre fundo claro mede 5,6:1 na tabela abaixo, então o parágrafo
+pequeno passa em AA; e não há degradê, emoji nem travessão em nenhuma string.
+
+Ficaram como tarefa os itens 3 a 6, que são corte de texto e mudança de layout, e a
+regra da casa é propor antes de mexer.
+
 ## Paleta e contraste
 
 Escura: fundo `#0E1013`, superfície `#16191D`, texto `#EDEFF2`, texto fraco

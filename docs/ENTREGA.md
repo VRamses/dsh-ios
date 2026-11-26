@@ -456,14 +456,16 @@ O que cada captura mostra, com o tamanho do arquivo:
 
 | captura | bytes | o que está na tela |
 |---|---|---|
-| `conversa.png` | 294.095 | o fim de uma resposta, com o bloco de código, dois cartões de artefato e, na barra de entrada, o seletor de modelo, **o ícone de câmera**, o clipe e o botão de enviar |
-| `artefato.png` | 660.701 | o visualizador do artefato HTML rodando o relógio dentro do `WKWebView`, com o ponteiro na hora do relógio do simulador, e o seletor entre Visualização e Código |
-| `ajustes.png` | 300.753 | a folha de Ajustes, com o seletor de motor, o cofre da DeepSeek, o endereço e o token da ponte, e as ações de salvar e apagar |
-| `dsh.png` | 154.168 | a folha de sessões aberta pela rota `dsh`, no estado sem ponte configurada, que é o estado de fábrica do simulador |
-| `voz.png` | 644.848 | a tela de voz no estado ocioso, "Microfone desligado", que é o padrão com a voz automática desligada |
+| `conversa.png` | 294.516 | o fim de uma resposta, com o bloco de código, dois cartões de artefato e, na barra de entrada, o seletor de modelo, **o ícone de câmera**, o clipe e o botão de enviar |
+| `artefato.png` | 660.904 | o visualizador do artefato HTML rodando o relógio dentro do `WKWebView`, com o ponteiro na hora do relógio do simulador, e o seletor entre Visualização e Código |
+| `ajustes.png` | 282.198 | a folha de Ajustes do build 5: a linha de estado do motor com o ícone de raio, o seletor de motor, o cofre da DeepSeek e, no começo da seção da ponte, a linha **Ler QR do computador** com o ícone de leitor |
+| `dsh.png` | 166.372 | a folha de sessões aberta pela rota `dsh`, no estado sem ponte configurada, que é o estado de fábrica do simulador |
+| `voz.png` | 645.380 | a tela de voz no estado ocioso, "Microfone desligado", que é o padrão com a voz automática desligada |
 
-As cinco capturas estão versionadas em `docs/capturas/`, tiradas desta rodada, para não
-depender de baixar artefato do Actions para olhar a tela:
+As cinco capturas foram trocadas nesta rodada pelas do build 5 e estão versionadas em
+`docs/capturas/`, para não depender de baixar artefato do Actions para olhar a tela. As duas
+linhas novas de Ajustes aparecem em `ajustes.png`; o leitor de QR aberto não aparece em captura
+nenhuma, porque o simulador não tem câmera com imagem nem QR na frente dela.
 
 ![Conversa com os dois cartões de artefato](capturas/conversa.png)
 
@@ -554,6 +556,71 @@ A rota foi exercitada daqui antes do build: `POST /v1/sessoes` devolveu 200 com
 `sessionId: session-f275c087-aeac-48ac-ade4-96af0cdbdb27`, no grupo `d0d03372-...` (Notebook),
 e essa sessão aceitou prompt em seguida.
 
+### A oitava instalação, no SUPERCOLLIDER, em 26/11/2026
+
+Esta rodada responde a três perguntas que sobraram da sétima: o seletor de Motor não mudava nada
+visível, o QR de pareamento só podia ser lido pela câmera do sistema, e a sessão escolhida sumia
+quando o app era fechado. O commit do código e do número do build é `3ea4205`, e a rodada do CI
+é a `45855692673`.
+
+#### O seletor de Motor passou a dizer qual motor está respondendo
+
+A causa de "não muda nada" não estava no seletor, e sim em quem o lia: `TelaPrincipal.configurar()`
+decide `usandoPonte = preferencias.usaPonte && sessaoEscolhida != nil`. Sem sessão escolhida, marcar
+Ponte não tem efeito nenhum, e a conversa segue na DeepSeek direta sem avisar. Ligar o seletor à
+força não resolveria, porque a ponte responde por sessão e não tem para onde mandar sem uma.
+
+A seção Motor ganhou uma linha de estado acima do seletor, desenhada a partir das duas condições
+reais (`usaPonte` e a sessão aberta), com três casos:
+
+| estado real | o que a linha mostra |
+|---|---|
+| DeepSeek direto | `Respondendo pela DeepSeek direta, com a chave deste iPhone.` e o ícone de raio em cinza |
+| Ponte marcada, sem sessão | `Ponte marcada, nenhuma sessão aberta: a conversa responde pela DeepSeek direta até você escolher uma sessão.`, ícone de exclamação em âmbar, e o botão **Abrir Sessões do DSH**, que fecha Ajustes e abre a folha de sessões |
+| Ponte com sessão | `Respondendo pela ponte do DSH, na sessão <título>.`, ícone de antena em verde |
+
+O botão espera 400 ms antes de abrir a folha, que é o que impede as duas folhas de se atropelarem,
+e a pendência passa por `PendenciaDeTela`, um sinalizador de uma linha em `Fontes/Nucleo` que a tela
+de conversa consome no `onChange` de `ajustesAbertos`.
+
+#### O QR passou a ser lido dentro de Ajustes
+
+Antes, o único caminho era a câmera do sistema abrir `dsh://ajustes?parear=...`, e quem estava em
+Ajustes tinha de sair do app para ler o código. Agora a seção da ponte começa com **Ler QR do
+computador**, que abre uma folha com a câmera e lê o código ali mesmo.
+
+`Fontes/Plataforma/LeitorDeQR.swift` embrulha o `AVCaptureSession` com saída de metadados `.qr`, do
+mesmo jeito que `CapturaDeFoto.swift` embrulha o `UIImagePickerController`: nenhuma biblioteca de
+terceiro entra no projeto por causa disso. A folha tem moldura de mira, quadro preto, fecha no X de
+44 pt, para a sessão de captura quando sai da tela e, se o QR não for um pedido de pareamento
+válido, mostra o motivo e reinicia a câmera em vez de ficar parada no mesmo quadro. O
+`NSCameraUsageDescription` já existia desde o build 1.
+
+O caminho de digitar continua na mesma seção, abaixo do botão, sem mudança de rota.
+
+#### A sessão escolhida sobrevive ao fechamento do app
+
+`Preferencias` ganhou `sessaoDaPonte` e `tituloDaSessaoDaPonte`, gravados no `UserDefaults` como as
+outras preferências, para o app reabrir na mesma sessão em vez de voltar calado para a DeepSeek
+direta. `sessaoAbertaAgora` é só de memória, de propósito: ele diz o que está valendo nesta execução,
+e a linha de estado acima é o que informa quando a ponte está marcada e a sessão não está aberta.
+
+#### A conta do que mudou
+
+| o que | como foi medido | resultado |
+|---|---|---|
+| rodada do CI | `gh run view 45855692673`, commit `3ea4205` | `success` nos dois jobs |
+| pacote entregue | artefato `ipa` da rodada, conferido com `zipfile` e `plistlib` | `DSH-livre.ipa` com 863.872 bytes e sha256 `E95C1985C510EDEA2CBCD3FCABDDEA2FC54068D564F4D7654779D22C052641D9` |
+| conteúdo do pacote | mesmo conferidor | 15 entradas, nenhuma com `PlugIns`, `dev.ramses.dsh`, versão `1.0.0` (build `5`), mínimo 18.0 |
+| código novo dentro do binário | procurar em UTF-8 no `Payload/DSH.app/DSH`, de 3.545.088 bytes | `LeitorDeQR`, `qrcode.viewfinder`, `Ler QR do computador`, `PendenciaDeTela`, `abrirSessoes`, `marcarSessaoAberta`, `sessaoDaPonte` e `Respondendo pela ponte` presentes |
+| onde o arquivo está | `C:\Users\victo\iCloudDrive\DSH-livre-20261126-build5.ipa` e `_tmp\share\DSH-livre-20261126-build5.ipa` | mesmo sha256 nos dois |
+
+Ajustes passa a mostrar "1.0.0 (5)" no rodapé.
+
+O que esta rodada **não** prova: nada foi instalado no aparelho ainda, e a câmera do simulador não
+tem QR para ler. O que está provado é que o código compila, que ele está dentro do binário e que a
+tela de Ajustes abre no simulador com a linha de estado e o botão novos.
+
 ## 11. O que fica aberto
 
 O que está abaixo é conhecido e não escondido. Nenhum item impede usar o app no dia a dia, mas
@@ -569,7 +636,8 @@ cada um é uma promessa que o app ainda não cumpre.
 | widget e compartilhamento no iPhone | exigem conta paga do programa de desenvolvedor | os dois alvos usam App Group, que a conta gratuita não libera; com conta gratuita, o pacote que instala é o `DSH-livre.ipa`, sem as extensões |
 | remover anexo no transcrito | a bolha desenha o cartão sem a ação de remover | anexo já enviado não sai da conversa, e o parâmetro `aoRemover` do cartão fica reservado à barra de entrada, que ainda usa as etiquetas dela |
 | instalação em iPhone físico | reinstalada em 25/11/2026 pelo Sideloadly com conta gratuita, com o build da gaveta, do teste de chave e do QR | a assinatura vence em 7 dias; renovar exige o Sideloadly com o PC e o iPhone na mesma rede |
-| pareamento por QR exercitado no aparelho | o caminho está provado no servidor (`POST /v1/pareamento` e `/v1/pareamento/trocar`, com código de uso único) e o app compila com ele | falta ler um QR com a câmera do iPhone e ver o token cair no cofre; é o teste seguinte |
+| pareamento por QR exercitado no aparelho | o caminho está provado no servidor (`POST /v1/pareamento` e `/v1/pareamento/trocar`, com código de uso único) e o build 5 traz o leitor dentro de Ajustes, com `AVCaptureMetadataOutput` e o mesmo `PedidoDePareamento` do link `dsh://` | falta ler um QR de verdade com a câmera do iPhone e ver o token cair no cofre; é o teste seguinte. O simulador do CI não tem QR nem câmera com imagem, então ele não fecha essa prova |
+| texto do pedido de câmera | `NSCameraUsageDescription` fala só da foto anexada | o leitor de QR usa a mesma permissão, e a frase não menciona o QR; quem lê o alerta pela primeira vez ao abrir o leitor vê uma explicação que não é a da ação. Muda numa linha do `Info-App.plist`, no próximo build |
 | foto pela ponte | o motor DeepSeek direto recebe a foto de verdade, em base64; a ponte recebe só o texto reconhecido, e o pedido diz isso ao modelo | a ponte é transporte de texto e não tem rota de imagem; fazer a foto atravessar exigiria uma rota nova nela e um servidor que aceitasse o JPEG |
 | importar a chave de busca web | o cofre do PC não tem `TAVILY_API_KEY` nem `BRAVE_API_KEY` | criar uma chave gratuita na Tavily, gravar no cofre do PC e usar o botão de importar, ou colar direto em Ajustes |
 
