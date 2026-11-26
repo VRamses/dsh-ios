@@ -21,6 +21,14 @@ O motor se escolhe em Ajustes, no menu lateral, e a escolha é lida de novo quan
 fecha. A ponte só entra em uso quando existe uma sessão do DSH escolhida nesta execução, porque
 sem sessão não há para onde mandar a pergunta; a própria tela de Ajustes diz isso.
 
+Anexo entra pela barra de entrada. O clipe abre o seletor de arquivos, que no iPhone é o app
+Arquivos e não enxerga a galeria; por isso a foto tem botão próprio, com menu de duas opções: tirar
+agora, pela câmera do sistema, ou escolher da galeria. Foto de documento passa por OCR, foto sem
+texto ganha o que o classificador de cena reconhece, e, no motor DeepSeek direto, o JPEG da foto
+segue dentro do pedido: o modelo vê a imagem em vez de só ler o que o OCR achou nela. Pela ponte,
+que transporta texto, a foto chega apenas como texto reconhecido, e o próprio pedido diz isso ao
+modelo para ele não responder como se tivesse visto.
+
 ## 2. Como o app compila
 
 Não existe compilador Swift nesta máquina Windows e não dá para instalar um: compilar para iOS
@@ -198,6 +206,26 @@ Duas coisas que esta instalação ensinou:
   o app troca o código de oito caracteres pelo token em `POST /v1/pareamento/trocar`, e o código
   vale uma vez só, por cinco minutos.
 
+### A quarta instalação, no SUPERCOLLIDER, em 25/11/2026
+
+Esta é a que leva ao aparelho o botão de foto na barra de entrada, com câmera e galeria, e a foto
+enviada como imagem no motor DeepSeek direto.
+
+| o que | como foi medido | resultado |
+|---|---|---|
+| rodada do CI | `gh run view 45736468022`, commit `c8d6863` | `success` nos dois jobs |
+| pacote entregue | baixar o artefato `ipa` da rodada e conferir o arquivo | `DSH-livre.ipa` com 808.012 bytes e sha256 `019048F1464D4FE37DC0D1F1B4082D8190866778E121ED50B7CF2A4230B75B22` |
+| conteúdo do pacote | listar as entradas com `zipfile` | 15 entradas, nenhuma com `PlugIns`, `dev.ramses.dsh`, versão `1.0.0` (build `1`), mínimo 18.0 |
+| uso de câmera e galeria no `Info.plist` | ler o plist do pacote | `NSCameraUsageDescription` e `NSPhotoLibraryUsageDescription` presentes, então o iOS não derruba o app ao abrir a câmera |
+| link de download | `curl -I` no endereço do tailnet, servido por `tailscale serve` | HTTP 200, `Content-Length: 808012`, tipo `application/x-itunes-ipa` |
+| imagem no pedido | leitura do código de `ServicoDeepSeek.conteudo` | a mensagem com foto vira lista de blocos, com `image_url` em `data:image/jpeg;base64`, só nas duas últimas falas do usuário |
+| imagem aceita pela API | pedido de prova direto na API, com um PNG em base64 | HTTP 200 nos dois nomes de modelo que a barra oferece, servidos por `deepseek-flash`, com descrição real da imagem na resposta |
+
+Depois de instalar, o teste é este: abrir uma conversa no motor DeepSeek direto, tocar na câmera,
+escolher da galeria uma foto com texto e pedir "o que está escrito aqui". Resposta que descreve o
+que está na foto, e não só o texto, é a prova de que a imagem chegou. No motor da ponte o mesmo
+pedido recebe só o texto reconhecido, e é assim que tem de ser.
+
 Caminho B, AltStore (para quem quer renovação automática):
 
 1. Instale o iTunes pelo site da Apple (o da Microsoft Store não serve) e o AltServer no PC.
@@ -299,32 +327,32 @@ Duas consequências práticas:
 
 A rodada `45554933068` rodou sobre o commit `6b2803e` e terminou com os dois jobs em `success`,
 passo por passo. É a rodada que produziu as capturas e as medidas de pacote abaixo. A rodada mais
-nova, `45659433505` sobre `b807bb3`, também fechou verde nos dois jobs, com 23 passos, e é a que
-está instalada no aparelho. Os números abaixo saíram do artefato baixado e aberto aqui, não do log
-do Actions.
+nova, `45736468022` sobre `c8d6863`, também fechou verde nos dois jobs e é a que trouxe a foto da
+câmera e da galeria na barra de entrada; é dela que sai o `DSH-livre-20261125-foto.ipa`. Os números
+abaixo saíram do artefato baixado e aberto aqui, não do log do Actions.
 
 | o que | como foi medido | resultado |
 |---|---|---|
 | job `simulador` | compilar, instalar no iPhone 16 do simulador e capturar as cinco rotas | `success`, 5 capturas de 1206x2622 |
 | widget e extensão de compartilhar | passo próprio, `xcodebuild -target DSHWidget` e `-target DSHCompartilhar` | `success`, os dois alvos compilam |
-| job `ipa` | compilar para aparelho sem assinatura e empacotar os dois pacotes | `success`, `DSH.ipa` com 821.846 bytes e `DSH-livre.ipa` com 764.148 bytes |
+| job `ipa` | compilar para aparelho sem assinatura e empacotar os dois pacotes | `success`, `DSH.ipa` com 865.860 bytes e `DSH-livre.ipa` com 808.012 bytes |
 | pacote livre | listar as entradas do `.ipa` com `zipfile` | 15 entradas e **zero** com `PlugIns`: o pacote é só `Payload/DSH.app` |
 | pacote completo | mesma listagem | `DSHWidget.appex` e `DSHCompartilhar.appex` dentro de `Payload/DSH.app/PlugIns/` |
 | binário | `Payload/DSH.app/DSH` dentro do IPA | 3.108.192 bytes |
 | catálogo de ícones | `Payload/DSH.app/Assets.car` | 32.735 bytes, ou seja, o catálogo compilou e não saiu vazio |
 | ícones derivados | PNGs dentro do pacote | `AppIcon60x60@2x.png` com 2.861 bytes e `AppIcon76x76@2x~ipad.png` com 3.500 bytes |
-| `Info.plist` do pacote | lido com `plistlib` | `dev.ramses.dsh`, versão `1.0.0` (build `1`), `MinimumOSVersion` 18.0, `DTXcode` 1640, `DTPlatformVersion` 18.5, `Info.plist` com 3.213 bytes |
+| `Info.plist` do pacote | lido com `plistlib` | `dev.ramses.dsh`, versão `1.0.0` (build `1`), `MinimumOSVersion` 18.0, com `NSCameraUsageDescription` e `NSPhotoLibraryUsageDescription` presentes |
 | ícone ligado ao alvo | `CFBundleIconName` e `CFBundlePrimaryIcon` | `AppIcon`, com `CFBundleIconFiles = [AppIcon60x60]` |
 
 O que cada captura mostra, com o tamanho do arquivo:
 
 | captura | bytes | o que está na tela |
 |---|---|---|
-| `conversa.png` | 292.172 | o fim de uma resposta, com o bloco de código e dois cartões de artefato: "Relógio de parede" (HTML) e "Relógio em SVG" (SVG) |
-| `artefato.png` | 655.115 | o visualizador do artefato HTML rodando o relógio dentro do `WKWebView`, com o ponteiro na hora do relógio do simulador, e o seletor entre Visualização e Código |
-| `ajustes.png` | 303.492 | a folha de Ajustes, com o seletor de motor, o cofre da DeepSeek, o endereço e o token da ponte, e as ações de salvar e apagar |
-| `dsh.png` | 153.901 | a folha de sessões aberta pela rota `dsh`, no estado sem ponte configurada, que é o estado de fábrica do simulador |
-| `voz.png` | 642.677 | a tela de voz no estado ocioso, "Microfone desligado", que é o padrão com a voz automática desligada |
+| `conversa.png` | 294.095 | o fim de uma resposta, com o bloco de código, dois cartões de artefato e, na barra de entrada, o seletor de modelo, **o ícone de câmera**, o clipe e o botão de enviar |
+| `artefato.png` | 660.701 | o visualizador do artefato HTML rodando o relógio dentro do `WKWebView`, com o ponteiro na hora do relógio do simulador, e o seletor entre Visualização e Código |
+| `ajustes.png` | 300.753 | a folha de Ajustes, com o seletor de motor, o cofre da DeepSeek, o endereço e o token da ponte, e as ações de salvar e apagar |
+| `dsh.png` | 154.168 | a folha de sessões aberta pela rota `dsh`, no estado sem ponte configurada, que é o estado de fábrica do simulador |
+| `voz.png` | 644.848 | a tela de voz no estado ocioso, "Microfone desligado", que é o padrão com a voz automática desligada |
 
 As cinco capturas estão versionadas em `docs/capturas/`, tiradas desta rodada, para não
 depender de baixar artefato do Actions para olhar a tela:
@@ -370,6 +398,7 @@ cada um é uma promessa que o app ainda não cumpre.
 | remover anexo no transcrito | a bolha desenha o cartão sem a ação de remover | anexo já enviado não sai da conversa, e o parâmetro `aoRemover` do cartão fica reservado à barra de entrada, que ainda usa as etiquetas dela |
 | instalação em iPhone físico | reinstalada em 25/11/2026 pelo Sideloadly com conta gratuita, com o build da gaveta, do teste de chave e do QR | a assinatura vence em 7 dias; renovar exige o Sideloadly com o PC e o iPhone na mesma rede |
 | pareamento por QR exercitado no aparelho | o caminho está provado no servidor (`POST /v1/pareamento` e `/v1/pareamento/trocar`, com código de uso único) e o app compila com ele | falta ler um QR com a câmera do iPhone e ver o token cair no cofre; é o teste seguinte |
+| foto pela ponte | o motor DeepSeek direto recebe a foto de verdade, em base64; a ponte recebe só o texto reconhecido, e o pedido diz isso ao modelo | a ponte é transporte de texto e não tem rota de imagem; fazer a foto atravessar exigiria uma rota nova nela e um servidor que aceitasse o JPEG |
 | importar a chave de busca web | o cofre do PC não tem `TAVILY_API_KEY` nem `BRAVE_API_KEY` | criar uma chave gratuita na Tavily, gravar no cofre do PC e usar o botão de importar, ou colar direto em Ajustes |
 
 
