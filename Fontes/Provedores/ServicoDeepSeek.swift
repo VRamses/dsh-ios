@@ -70,6 +70,11 @@ final class ServicoDeepSeek: ProvedorDeConversa {
         requisicao.timeoutInterval = 180
         requisicao.setValue("application/json", forHTTPHeaderField: "Content-Type")
         requisicao.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+        // A resposta em streaming chega comprimida quando o cliente aceita
+        // compressão, e aí o leitor de linhas não reconhece quadro nenhum: o
+        // stream termina com 200 e zero pedaços. Pedir identidade mantém o texto
+        // puro, que é o formato do SSE.
+        requisicao.setValue("identity", forHTTPHeaderField: "Accept-Encoding")
         requisicao.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         requisicao.httpBody = try corpo(pedido: pedido, modelo: modelo)
 
@@ -93,14 +98,28 @@ final class ServicoDeepSeek: ProvedorDeConversa {
         // conversa sem resposta e sem erro, e a tela em silêncio; por isso a conta
         // existe e a falta vira erro no fim.
         var pedacos = 0
+        // Primeiras linhas cruas do stream. Só servem para o erro conseguir dizer o
+        // que chegou quando nada foi reconhecido, que é o caso em que a tela hoje
+        // fica muda.
+        var cruas: [String] = []
 
         for try await linha in bytes.lines {
             if Task.isCancelled { throw CancellationError() }
             guard let quadro = acumulador.consumir(linha: linha) else { continue }
             if quadro.dados == "[DONE]" { break }
+            if cruas.count < 3, !quadro.dados.isEmpty {
+                cruas.append(String(quadro.dados.prefix(160)))
+            }
             guard let dados = quadro.dados.data(using: .utf8),
                   let raiz = (try? JSONSerialization.jsonObject(with: dados)) as? [String: Any]
             else { continue }
+
+            // A API também recusa dentro de um stream que já começou com 200, e o
+            // motivo vem neste campo. Antes ele era descartado.
+            if let erro = raiz["error"] as? [String: Any],
+               let mensagem = erro["message"] as? String {
+                throw ErroDaConversa.rede("a API recusou no meio do stream: \(mensagem)")
+            }
 
             if let escolhas = raiz["choices"] as? [[String: Any]], let primeira = escolhas.first {
                 if let delta = primeira["delta"] as? [String: Any] {
@@ -159,8 +178,9 @@ final class ServicoDeepSeek: ProvedorDeConversa {
         // o usuário veria a mensagem dele sozinha. Erro dito é melhor que silêncio.
         if pedacos == 0 && completas.isEmpty {
             let motivo = motivoFinal.map { " (motivo: \($0))" } ?? ""
+            let mostra = cruas.isEmpty ? "" : " (primeiras linhas: \(cruas.joined(separator: " | ")))"
             throw ErroDaConversa.rede(
-                "a API respondeu 200 e não mandou nenhum pedaço de texto\(motivo)"
+                "a API respondeu 200 e não mandou nenhum pedaço de texto\(motivo)\(mostra)"
             )
         }
         for chamada in completas {
@@ -297,6 +317,7 @@ final class ServicoDeepSeek: ProvedorDeConversa {
         requisicao.httpMethod = "POST"
         requisicao.timeoutInterval = 60
         requisicao.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        requisicao.setValue("identity", forHTTPHeaderField: "Accept-Encoding")
         requisicao.setValue("Authorization", forHTTPHeaderField: "Bearer \(limpa)")
 
         let corpo: [String: Any] = [
@@ -313,7 +334,10 @@ final class ServicoDeepSeek: ProvedorDeConversa {
             let inicio = texto
                 .replacingOccurrences(of: "\n", with: " ")
                 .prefix(240)
-            return "HTTP \(status). Resposta: \(inicio)"
+            // O tamanho e a ponta da chave entram no relatório porque chave com
+            // caractere invisível colado passa na tela e falha na API.
+            let ponta = limpa.count >= 4 ? String(limpa.suffix(4)) : limpa
+            return "HTTP \(status). Chave com \(limpa.count) caracteres, terminando em \(ponta). Resposta: \(inicio)"
         } catch {
             return "Não chegou a responder: \(error.localizedDescription)"
         }
