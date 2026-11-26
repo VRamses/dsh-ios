@@ -765,6 +765,56 @@ codificação, e é essa linha que diz se o corpo veio vazio ou comprimido.
 O que esta rodada **não** prova: nada foi instalado no aparelho ainda. A prova é de compilação nos
 dois jobs, de conteúdo do pacote e da medição da API feita daqui com a mesma chave e o mesmo corpo.
 
+### A décima primeira instalação, no SUPERCOLLIDER, em 26/11/2026
+
+Esta rodada ataca a frase que a tela mostrou às 18:14 de 26/11/2026, já com o build 7 instalado e o
+motor na ponte (o item SUPERCOLLIDER do seletor): "Não deu para responder. Falha de rede: a sessão
+do DSH fechou os eventos sem devolver texto". A frase é do caminho da ponte, não do DeepSeek direto,
+e nasce quando o stream de eventos termina sem nenhum pedaço de texto nem de raciocínio.
+
+O log da ponte entregou o caso inteiro, com as duas tentativas do aparelho:
+
+| quando | o que a ponte registrou |
+|---|---|
+| 21:14:42Z | `eventos -> session-94f30e75...: 123 quadros, 0 chars de texto, 1253 de raciocinio, fechou por fim do turno (end)` |
+| 21:14:48Z | `eventos -> session-94f30e75...: 11 quadros, 0 chars de texto, 1000 de raciocinio, fechou por fim do turno (end)` |
+
+Aquela sessão é esta conversa do computador, aberta e respondendo na hora do teste. O app tinha
+adotado a sessão que já existia na lista e mandado a pergunta para dentro dela. Sessão ocupada
+fecha o turno e o texto vai para a conversa que já estava rodando, então o iPhone recebia quadro de
+raciocínio e nenhum de texto. Não era falha de rede nem de token: era a pergunta caindo na conversa
+de outra pessoa.
+
+| o que | como foi medido | resultado |
+|---|---|---|
+| a ponte responde numa sessão nova | `POST /v1/sessoes` seguido de mensagem e da leitura de `/eventos`, feito daqui com o token da ponte | sessão `session-265bee03...`, quadro `assistant` com o texto `pronto` em 2.035 ms, 2 quadros no total |
+| a sessão nova não herda conversa | mesma leitura | o stream abre com `event: aberto` e fecha logo depois do `assistant`, sem quadro de ninguém |
+| a ponte recusa código já usado | `POST /v1/pareamento/trocar` duas vezes com o mesmo código | primeira devolve o token da ponte, segunda responde 404 |
+
+| o que mudou | onde | por quê |
+|---|---|---|
+| sessão criada sozinha no primeiro envio | `Fontes/Conversa/ConversaViewModel.swift`, `executarEnvio` | com o motor da ponte e sem sessão escolhida, o app chama `POST /v1/sessoes` e usa a sessão que voltou, em vez de parar e mandar o usuário escolher na lista |
+| erro que ensina a saída | `Fontes/Provedores/ServicoPonte.swift` | o texto do stream vazio passou a dizer que a sessão pode estar respondendo no computador e que a saída é criar uma sessão nova pelo nome do modelo |
+| versão | `project.yml` | `CURRENT_PROJECT_VERSION` de 7 para 8 |
+
+#### A conta do que mudou
+
+| o que | como foi medido | resultado |
+|---|---|---|
+| rodada do CI | `gh run view 45897097854`, commit `0634b19` | `success` nos dois jobs, "IPA sem assinatura" e "Simulador e capturas" |
+| pacote entregue | artefato `ipa` da rodada, conferido com `zipfile` e `plistlib` | `DSH-livre.ipa` com 931.439 bytes e sha256 `CD14B28F46C61D4761ECDCE02D7E58071A2A5D2F7D08B4B2E60BF4D1FFBE9716` |
+| conteúdo do pacote | mesmo conferidor | 15 entradas, nenhuma com `PlugIns`, `dev.ramses.dsh`, versão `1.0.0` build `8`, mínimo 18.0 |
+| binário | `file_size` de `Payload/DSH.app/DSH` no `zipfile` | 3.796.544 bytes, 568 a mais que os 3.795.976 do build 7, que é o código novo |
+| onde o arquivo está | `C:\Users\victo\iCloudDrive\DSH-livre-20261126-build8.ipa` e `_tmp\share\DSH-livre-20261126-build8.ipa` | mesmo sha256 nos dois |
+
+Depois de instalar, Ajustes tem de mostrar "1.0.0 (8)" no rodapé. Com o motor na ponte, a primeira
+mensagem cria uma sessão só do iPhone e ela responde; com o motor no DeepSeek direto, a resposta vem
+pelo stream descomprimido do build 7.
+
+O que esta rodada **não** prova: nada foi instalado no aparelho ainda. A prova é de compilação nos
+dois jobs, do conteúdo do pacote e da resposta da ponte medida daqui com a mesma sessão nova que o
+app passa a criar.
+
 ## 11. O que fica aberto
 
 O que está abaixo é conhecido e não escondido. Nenhum item impede usar o app no dia a dia, mas
@@ -783,6 +833,7 @@ cada um é uma promessa que o app ainda não cumpre.
 | pareamento por QR exercitado no aparelho | o caminho está provado no servidor (`POST /v1/pareamento` e `/v1/pareamento/trocar`, com código de uso único) e o build 5 traz o leitor dentro de Ajustes, com `AVCaptureMetadataOutput` e o mesmo `PedidoDePareamento` do link `dsh://` | falta ler um QR de verdade com a câmera do iPhone e ver o token cair no cofre; é o teste seguinte. O simulador do CI não tem QR nem câmera com imagem, então ele não fecha essa prova |
 | texto do pedido de câmera | resolvido no build 6: `NSCameraUsageDescription` cita a foto anexada e o QR de pareamento, e o pacote traz a frase nova em `Info.plist` | o alerta do sistema agora descreve as duas ações que usam a câmera |
 | resposta vazia do motor DeepSeek direto | tratado no build 7: o stream passou a ser lido pela delegação do `URLSession`, que descomprime, e o erro diz quantas linhas chegaram junto do `Content-Encoding` | falta confirmar no aparelho que a conversa responde; se não responder, a faixa do erro passa a nomear a causa |
+| pergunta caindo em sessão ocupada | tratado no build 8: o app cria a sessão do iPhone no primeiro envio e o erro do stream vazio ensina a criar uma sessão nova | falta confirmar no aparelho que a sessão criada pela ponte aparece na lista do computador e responde na tela do iPhone, com título legível |
 | troca entre dois computadores | a lista, o token por instância e o espelho para as preferências existem e a seção Computadores abre no simulador com um computador salvo | falta ter dois computadores com ponte de pé e alternar entre eles para ver a sessão de cada um carregar no aparelho; o simulador do CI não tem tailnet |
 | foto pela ponte | o motor DeepSeek direto recebe a foto de verdade, em base64; a ponte recebe só o texto reconhecido, e o pedido diz isso ao modelo | a ponte é transporte de texto e não tem rota de imagem; fazer a foto atravessar exigiria uma rota nova nela e um servidor que aceitasse o JPEG |
 | importar a chave de busca web | o cofre do PC não tem `TAVILY_API_KEY` nem `BRAVE_API_KEY` | criar uma chave gratuita na Tavily, gravar no cofre do PC e usar o botão de importar, ou colar direto em Ajustes |
