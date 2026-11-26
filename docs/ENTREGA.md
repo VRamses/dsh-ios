@@ -702,14 +702,17 @@ iPhone ao DSH do computador.
 
 | o que | como foi medido | resultado |
 |---|---|---|
-| rodada do CI | `gh run view 45879769836`, commit `578d885` | _preencher_ |
-| pacote entregue | artefato `ipa` da rodada, conferido com `zipfile` e `plistlib` | _preencher_ |
-| conteúdo do pacote | mesmo conferidor | 15 entradas, versão `1.0.0` (build `6`), mínimo 18.0 |
-| código novo dentro do binário | procurar em UTF-8 no `Payload/DSH.app/DSH` | `Instancias`, `maquina`, `Adicionar pela câmera`, `Esquecer`, `Contexto`, `Tentar de novo` |
+| rodada do CI | `gh run view 45880010423`, commit `8f4db8e` | os dois jobs verdes, `Simulador e capturas` em 8 min 46 s |
+| primeira tentativa desta rodada | `gh run view 45879769836`, commit `578d885` | vermelha: `error: cannot use mutating member on immutable value: 'partes' is a 'let' constant` em `BolhaDeMensagem.swift`; consertado com `var partes` no commit seguinte |
+| pacote entregue | artefato `ipa` da rodada, conferido com `zipfile` e `plistlib` | 925.188 bytes, sha256 `8936DEA2F0FA5614BCCE295F0AD2F8C2595D0C549805706E77085956AA4D7BE8` |
+| conteúdo do pacote | mesmo conferidor | 15 entradas, `dev.ramses.dsh`, versão `1.0.0` build `6`, mínimo 18.0, sem `PlugIns` |
+| código novo dentro do binário | procurar em UTF-8 no `Payload/DSH.app/DSH` (3.770.368 bytes) | presentes: `Instancias`, `aplicandoAtivacao`, `linhaDoComputador`, `sincronizarComPreferencias`, `repetirUltimaResposta`, `tokensDeEntrada`. Textos curtos de interface não aparecem como UTF-8 contíguo no binário (`Esquecer` e `Contexto` deram ausente, `Adicionar pela câmera` deu presente), então essa busca serve para símbolo, não para frase de tela |
 | onde o arquivo está | `C:\Users\victo\iCloudDrive\DSH-livre-20261126-build6.ipa` e `_tmp\share\DSH-livre-20261126-build6.ipa` | mesmo sha256 nos dois |
-| link pelo tailnet | `curl -I` em `https://supercollider.tail056d02.ts.net:8444/DSH-livre-20261126-build6.ipa` | _preencher_ |
+| link pelo tailnet | `curl -I` em `https://supercollider.tail056d02.ts.net:8444/DSH-livre-20261126-build6.ipa` | 200, `Content-Length: 925188`, `Content-Type: application/x-itunes-ipa`, servido pelo `python -m http.server 43141` que precisa estar de pé |
+| telas no simulador | artefato `simulador` da mesma rodada, cinco PNG | a seção **Computadores** aparece com o computador da lista, o endereço truncado no meio e o aviso vermelho de token faltando; a resposta termina com copiar e, na última, refazer |
 
-Ajustes passa a mostrar "1.0.0 (6)" no rodapé.
+O pacote está com `CFBundleShortVersionString` 1.0.0 e `CFBundleVersion` 6, que é o par que a seção
+Sobre de Ajustes imprime a partir do `Bundle.main`: "1.0.0 (6)".
 
 O que esta rodada **não** prova: nada foi instalado no aparelho ainda; o QR não foi lido com a câmera
 do iPhone, e a troca entre dois computadores não foi exercitada com os dois ligados. O que está
@@ -732,7 +735,8 @@ cada um é uma promessa que o app ainda não cumpre.
 | remover anexo no transcrito | a bolha desenha o cartão sem a ação de remover | anexo já enviado não sai da conversa, e o parâmetro `aoRemover` do cartão fica reservado à barra de entrada, que ainda usa as etiquetas dela |
 | instalação em iPhone físico | reinstalada em 25/11/2026 pelo Sideloadly com conta gratuita, com o build da gaveta, do teste de chave e do QR | a assinatura vence em 7 dias; renovar exige o Sideloadly com o PC e o iPhone na mesma rede |
 | pareamento por QR exercitado no aparelho | o caminho está provado no servidor (`POST /v1/pareamento` e `/v1/pareamento/trocar`, com código de uso único) e o build 5 traz o leitor dentro de Ajustes, com `AVCaptureMetadataOutput` e o mesmo `PedidoDePareamento` do link `dsh://` | falta ler um QR de verdade com a câmera do iPhone e ver o token cair no cofre; é o teste seguinte. O simulador do CI não tem QR nem câmera com imagem, então ele não fecha essa prova |
-| texto do pedido de câmera | `NSCameraUsageDescription` fala só da foto anexada | o leitor de QR usa a mesma permissão, e a frase não menciona o QR; quem lê o alerta pela primeira vez ao abrir o leitor vê uma explicação que não é a da ação. Muda numa linha do `Info-App.plist`, no próximo build |
+| texto do pedido de câmera | resolvido no build 6: `NSCameraUsageDescription` cita a foto anexada e o QR de pareamento, e o pacote traz a frase nova em `Info.plist` | o alerta do sistema agora descreve as duas ações que usam a câmera |
+| troca entre dois computadores | a lista, o token por instância e o espelho para as preferências existem e a seção Computadores abre no simulador com um computador salvo | falta ter dois computadores com ponte de pé e alternar entre eles para ver a sessão de cada um carregar no aparelho; o simulador do CI não tem tailnet |
 | foto pela ponte | o motor DeepSeek direto recebe a foto de verdade, em base64; a ponte recebe só o texto reconhecido, e o pedido diz isso ao modelo | a ponte é transporte de texto e não tem rota de imagem; fazer a foto atravessar exigiria uma rota nova nela e um servidor que aceitasse o JPEG |
 | importar a chave de busca web | o cofre do PC não tem `TAVILY_API_KEY` nem `BRAVE_API_KEY` | criar uma chave gratuita na Tavily, gravar no cofre do PC e usar o botão de importar, ou colar direto em Ajustes |
 
