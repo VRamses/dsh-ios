@@ -78,6 +78,13 @@ struct TelaPrincipal: View {
                     // fechar Ajustes, a tela recopia o que mudou sem reabrir o app.
                     modeloEscolhido = Preferencias.compartilhada.modelo
                     await configurar()
+                    // Ajustes só pede isso quando o motor é a ponte e falta
+                    // sessão. A espera é para a folha de Ajustes terminar de
+                    // sair antes de a de sessões entrar.
+                    guard PendenciaDeTela.abrirSessoes else { return }
+                    PendenciaDeTela.abrirSessoes = false
+                    try? await Task.sleep(nanoseconds: 400_000_000)
+                    sessoesAbertas = true
                 }
             }
             .task { await configurar() }
@@ -376,6 +383,7 @@ struct TelaPrincipal: View {
         let preferencias = Preferencias.compartilhada
         preferencias.modelo = pedido
         preferencias.usaPonte = false
+        preferencias.marcarSessaoAberta(nil)
         modelo.definirSessao(nil)
         modelo.configurar(
             modelo: pedido,
@@ -393,6 +401,7 @@ struct TelaPrincipal: View {
         novaConversaPendente = false
         let preferencias = Preferencias.compartilhada
         preferencias.usaPonte = true
+        preferencias.marcarSessaoAberta(sessao.id, titulo: sessao.titulo)
         if let nova = modelo.criarConversa(comTitulo: sessao.titulo) {
             conversaAtual = nova
         }

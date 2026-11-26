@@ -15,6 +15,8 @@ final class Preferencias: ObservableObject {
         static let usaPonte = "dsh.usaPonte"
         static let enderecoDaPonte = "dsh.enderecoDaPonte"
         static let vozAutomatica = "dsh.vozAutomatica"
+        static let sessaoDaPonte = "dsh.sessaoDaPonte"
+        static let tituloDaSessaoDaPonte = "dsh.tituloDaSessaoDaPonte"
     }
 
     private let padroes: UserDefaults
@@ -43,6 +45,23 @@ final class Preferencias: ObservableObject {
         didSet { padroes.set(vozAutomatica, forKey: Chave.vozAutomatica) }
     }
 
+    /// Última sessão do DSH escolhida, guardada só para a tela saber o que dizer
+    /// em Ajustes depois de o app reabrir. O motor não volta sozinho para a ponte
+    /// por causa dela: quem decide é `sessaoAbertaAgora`.
+    @Published var sessaoDaPonte: String {
+        didSet { padroes.set(sessaoDaPonte, forKey: Chave.sessaoDaPonte) }
+    }
+
+    @Published var tituloDaSessaoDaPonte: String {
+        didSet { padroes.set(tituloDaSessaoDaPonte, forKey: Chave.tituloDaSessaoDaPonte) }
+    }
+
+    /// Sessão aberta nesta execução. Fica só em memória, de propósito: reabrir o
+    /// app volta para a DeepSeek direta até alguém escolher uma sessão de novo, e
+    /// Ajustes precisa saber a diferença entre "marcado" e "respondendo pela
+    /// ponte agora" para não mentir no estado do motor.
+    @Published private(set) var sessaoAbertaAgora: String?
+
     init(padroes: UserDefaults = .standard) {
         self.padroes = padroes
         let modeloSalvo = padroes.string(forKey: Chave.modelo) ?? Self.modeloPadrao
@@ -51,6 +70,8 @@ final class Preferencias: ObservableObject {
         let usaPonteSalvo = padroes.object(forKey: Chave.usaPonte) as? Bool ?? false
         let enderecoSalvo = padroes.string(forKey: Chave.enderecoDaPonte) ?? Self.enderecoDaPontePadrao
         let vozSalva = padroes.object(forKey: Chave.vozAutomatica) as? Bool ?? false
+        let sessaoSalva = padroes.string(forKey: Chave.sessaoDaPonte) ?? ""
+        let tituloSalvo = padroes.string(forKey: Chave.tituloDaSessaoDaPonte) ?? ""
 
         self.modelo = modeloSalvo
         self.temperatura = temperaturaSalva
@@ -58,6 +79,17 @@ final class Preferencias: ObservableObject {
         self.usaPonte = usaPonteSalvo
         self.enderecoDaPonte = enderecoSalvo
         self.vozAutomatica = vozSalva
+        self.sessaoDaPonte = sessaoSalva
+        self.tituloDaSessaoDaPonte = tituloSalvo
+        self.sessaoAbertaAgora = nil
+    }
+
+    /// Chamado pela conversa quando uma sessão do DSH é aberta ou descartada.
+    func marcarSessaoAberta(_ identificador: String?, titulo: String = "") {
+        sessaoAbertaAgora = identificador
+        guard let identificador, !identificador.isEmpty else { return }
+        sessaoDaPonte = identificador
+        tituloDaSessaoDaPonte = titulo
     }
 
     var modeloEhReasoner: Bool {

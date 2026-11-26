@@ -37,6 +37,7 @@ struct TelaDeAjustes: View {
     @State private var testandoDeepSeek = false
     @State private var diagnosticoDeepSeek: String?
     @State private var pareando = false
+    @State private var lendoQR = false
 
     /// Nomes das chaves como estão no cofre do DSH na máquina da ponte. A
     /// DeepSeek é a única que existe hoje; as de busca entram aqui porque o
@@ -75,6 +76,12 @@ struct TelaDeAjustes: View {
             }
         }
         .environment(\.locale, Locale(identifier: "pt_BR"))
+        .sheet(isPresented: $lendoQR) {
+            FolhaDeLeituraDeQR(
+                aoLer: { texto in aceitarLeitura(texto) },
+                aoFechar: { lendoQR = false }
+            )
+        }
         .task {
             await lerCofre()
             await aplicarPareamento()
@@ -85,6 +92,8 @@ struct TelaDeAjustes: View {
 
     private var secaoDoMotor: some View {
         Section {
+            linhaDoMotorEmUso
+
             Picker("Motor", selection: $preferencias.usaPonte) {
                 Text("Ponte do DSH").tag(true)
                 Text("DeepSeek direto").tag(false)
@@ -95,11 +104,83 @@ struct TelaDeAjustes: View {
             .accessibilityLabel("Motor da conversa")
             .accessibilityHint("Escolhe entre a ponte do DSH no computador e a API da DeepSeek.")
 
-            textoDeApoio("Pela ponte, a conversa usa as sessões do DSH no computador e ganha as ferramentas de MCP (Droz, Miro, Jira, Zendesk). No DeepSeek direto só existem as ferramentas locais: busca web, agenda e lembretes.")
-            textoDeApoio("A ponte só entra em uso depois de escolher uma sessão em Sessões do DSH, no menu. Sem sessão escolhida, o app responde pela DeepSeek direta mesmo com a ponte marcada aqui.")
+            textoDeApoio("Pela ponte, a conversa roda nas sessões do DSH no computador e ganha as ferramentas de MCP dele (Droz, Miro, Jira, Zendesk). No DeepSeek direto só existem as ferramentas locais: busca web, agenda e lembretes.")
         } header: {
             cabecalho("Motor")
         }
+    }
+
+    // MARK: - Estado do motor
+
+    /// O motor de verdade é o seletor mais a sessão aberta em Sessões do DSH: a
+    /// ponte só responde com sessão, e sem ela o app cai calado na DeepSeek
+    /// direta. Como o seletor sozinho não muda nada visível, esta linha diz qual
+    /// dos dois está respondendo agora e, quando falta a sessão, leva até ela.
+    private var linhaDoMotorEmUso: some View {
+        HStack(alignment: .top, spacing: Espaco.s) {
+            Image(systemName: iconeDoMotor)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(corDoMotor)
+                .frame(minHeight: 44, alignment: .center)
+            VStack(alignment: .leading, spacing: Espaco.xs) {
+                Text(textoDoMotor)
+                    .font(Tipografia.legenda())
+                    .foregroundStyle(Cores.texto)
+                    .fixedSize(horizontal: false, vertical: true)
+                if pendenteDeSessao {
+                    Button {
+                        pedirSessoes()
+                    } label: {
+                        Text("Abrir Sessões do DSH")
+                            .font(Tipografia.legenda())
+                            .foregroundStyle(Cores.acento)
+                            .frame(minHeight: 44, alignment: .leading)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Abrir as sessões do DSH para escolher uma")
+                    .accessibilityHint("Fecha Ajustes e abre a lista de sessões do computador.")
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .listRowBackground(Cores.superficie)
+        .accessibilityElement(children: .contain)
+    }
+
+    /// A ponte está marcada mas não há sessão aberta nesta execução, que é o
+    /// caso em que o app responde pela DeepSeek direta sem avisar.
+    private var pendenteDeSessao: Bool {
+        preferencias.usaPonte && (preferencias.sessaoAbertaAgora ?? "").isEmpty
+    }
+
+    private var textoDoMotor: String {
+        if !preferencias.usaPonte {
+            return "Respondendo pela DeepSeek direta, com a chave deste iPhone."
+        }
+        if pendenteDeSessao {
+            return "Ponte marcada, nenhuma sessão aberta: a conversa responde pela DeepSeek direta até você escolher uma sessão."
+        }
+        let titulo = preferencias.tituloDaSessaoDaPonte
+        return titulo.isEmpty
+            ? "Respondendo pela ponte do DSH, na sessão aberta agora."
+            : "Respondendo pela ponte do DSH, na sessão \(titulo)."
+    }
+
+    private var iconeDoMotor: String {
+        if !preferencias.usaPonte { return "bolt.horizontal.circle" }
+        return pendenteDeSessao ? "exclamationmark.circle" : "antenna.radiowaves.left.and.right"
+    }
+
+    private var corDoMotor: Color {
+        if pendenteDeSessao { return Cores.acento }
+        return preferencias.usaPonte ? Cores.sucesso : Cores.textoFraco
+    }
+
+    @MainActor
+    private func pedirSessoes() {
+        PendenciaDeTela.abrirSessoes = true
+        fechar()
     }
 
     // MARK: - 2. DeepSeek
@@ -170,7 +251,34 @@ struct TelaDeAjustes: View {
 
     private var secaoDaPonte: some View {
         Section {
-            textoDeApoio("O endereço é o do tailnet que publica a ponte, no formato https://maquina.tailnet.ts.net:8443. O token é o do ponte.json da máquina que roda a ponte.")
+            Button {
+                lendoQR = true
+            } label: {
+                HStack(spacing: Espaco.s) {
+                    Image(systemName: "qrcode.viewfinder")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(Cores.acento)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Ler QR do computador")
+                            .font(Tipografia.corpo())
+                            .foregroundStyle(Cores.texto)
+                        Text("Põe o endereço da ponte e troca o código pelo token.")
+                            .font(Tipografia.legenda())
+                            .foregroundStyle(Cores.textoFraco)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(pareando)
+            .listRowBackground(Cores.superficie)
+            .accessibilityLabel("Ler o QR de pareamento do computador")
+            .accessibilityHint("Abre a câmera para ler o QR que o DSH do computador mostra em Ajustes.")
+
+            textoDeApoio("O outro caminho é digitar: o endereço é o do tailnet que publica a ponte, no formato https://maquina.tailnet.ts.net:8443, e o token é o do ponte.json da máquina que roda a ponte.")
 
             TextField("https://maquina.tailnet.ts.net:8443", text: $preferencias.enderecoDaPonte)
                 .font(Tipografia.codigo(13))
@@ -530,6 +638,18 @@ struct TelaDeAjustes: View {
 
     // MARK: - Pareamento por QR
 
+    /// Texto que veio da câmera do próprio app. Devolve `false` quando o QR não
+    /// é de pareamento, e aí a folha continua aberta e recomeça a câmera, em vez
+    /// de fechar sem explicar nada.
+    @MainActor
+    private func aceitarLeitura(_ texto: String) -> Bool {
+        PendenciaDePareamento.recolher(de: texto)
+        guard PendenciaDePareamento.atual != nil else { return false }
+        lendoQR = false
+        Task { await aplicarPareamento() }
+        return true
+    }
+
     /// Aplica o pedido que chegou num QR: grava o endereço, troca o código de
     /// uso único pelo token, guarda o token no cofre e liga o motor da ponte. O
     /// token nunca viajou no QR e não aparece na tela.
@@ -760,5 +880,103 @@ private enum ResultadoDoTeste {
         case .sucesso: return "checkmark.circle"
         case .falha: return "exclamationmark.triangle"
         }
+    }
+}
+
+/// A câmera do pareamento, aberta de dentro de Ajustes.
+///
+/// A tela é preta porque a prévia da câmera é o conteúdo: moldura branca fina
+/// para o QR entrar, uma frase dizendo o que apontar e um botão de fechar. O
+/// resto do app fica de fora enquanto ela está aberta.
+private struct FolhaDeLeituraDeQR: View {
+    /// Recebe o texto lido e devolve `true` quando ele serviu. Quando devolve
+    /// `false`, a folha mostra o motivo e recomeça a câmera.
+    var aoLer: (String) -> Bool
+    var aoFechar: () -> Void
+
+    @State private var erro: String?
+    @State private var tentativa = 0
+
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+
+            if LeitorDeQR.disponivel {
+                LeitorDeQR(
+                    aoLer: { texto in
+                        if aoLer(texto) {
+                            aoFechar()
+                        } else {
+                            erro = "Esse QR não é de pareamento do DSH. Use o que o DSH do computador mostra em Ajustes."
+                            tentativa += 1
+                        }
+                    },
+                    aoFalhar: { motivo in erro = motivo }
+                )
+                // Cada tentativa é um leitor novo: depois da primeira leitura a
+                // câmera para, e trocar o `id` é o que a liga de novo.
+                .id(tentativa)
+                .ignoresSafeArea()
+            }
+
+            VStack(spacing: Espaco.xl) {
+                cabecalho
+                Spacer(minLength: 0)
+                if LeitorDeQR.disponivel {
+                    moldura
+                }
+                Spacer(minLength: 0)
+                if let erro {
+                    HStack(alignment: .top, spacing: Espaco.xs) {
+                        Image(systemName: "exclamationmark.circle")
+                            .font(.system(size: 12, weight: .semibold))
+                        Text(erro)
+                            .font(Tipografia.legenda())
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .foregroundStyle(.white)
+                    .padding(Espaco.m)
+                    .background(Color.black.opacity(0.7), in: RoundedRectangle(cornerRadius: Raio.m, style: .continuous))
+                } else {
+                    Text("Aponte para o QR que o DSH do computador mostra em Ajustes.")
+                        .font(Tipografia.legenda())
+                        .foregroundStyle(.white)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(Espaco.m)
+                        .background(Color.black.opacity(0.7), in: RoundedRectangle(cornerRadius: Raio.m, style: .continuous))
+                }
+            }
+            .padding(Espaco.l)
+        }
+        .preferredColorScheme(.dark)
+    }
+
+    private var cabecalho: some View {
+        HStack(spacing: Espaco.s) {
+            Text("Ler QR do computador")
+                .font(Tipografia.titulo(20))
+                .foregroundStyle(.white)
+            Spacer(minLength: 0)
+            Button(action: { aoFechar() }) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 44, height: 44)
+                    .background(Color.black.opacity(0.5), in: Circle())
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Fechar o leitor de QR")
+        }
+    }
+
+    /// Só a moldura, sem mira animada nem escurecimento em volta: o QR precisa
+    /// aparecer inteiro, e a câmera já escurece o que está fora do foco.
+    private var moldura: some View {
+        RoundedRectangle(cornerRadius: Raio.g, style: .continuous)
+            .stroke(Color.white.opacity(0.85), lineWidth: 2)
+            .frame(width: 232, height: 232)
+            .accessibilityHidden(true)
     }
 }
