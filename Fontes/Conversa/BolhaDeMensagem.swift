@@ -203,7 +203,7 @@ struct BolhaDeMensagem: View {
 
     private var gasto: String? {
         guard let entrada = tokensDeEntrada, entrada > 0 else { return nil }
-        let partes = ["Contexto \(entrada.formatted())"]
+        var partes = ["Contexto \(entrada.formatted())"]
         if let saida = tokensDeSaida, saida > 0 {
             partes.append("\(saida.formatted()) de saída")
         }

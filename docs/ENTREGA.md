@@ -622,6 +622,100 @@ O que esta rodada **não** prova: nada foi instalado no aparelho ainda, e a câm
 tem QR para ler. O que está provado é que o código compila, que ele está dentro do binário e que a
 tela de Ajustes abre no simulador com a linha de estado e o botão novos.
 
+### A nona instalação, no SUPERCOLLIDER, em 26/11/2026
+
+O pedido desta rodada foi curto: "quero que conectar com outras instâncias seja mais fácil". O app
+guardava um endereço e um token, e só eles: parear com o notebook apagava o SUPERCOLLIDER, e voltar
+exigia digitar endereço e token de novo. Esta rodada transforma esses dois campos soltos numa lista
+de computadores, e aproveita para pôr na bolha o que faltava de leitura da resposta: copiar, refazer
+e o tamanho do contexto.
+
+#### Vários computadores, com o token de cada um
+
+`Fontes/Nucleo/Instancias.swift` guarda a lista em `UserDefaults` (`dsh.instancias`), o identificador
+do computador em uso (`dsh.instanciaAtiva`) e o token de cada um numa conta própria do Keychain,
+`ponte.token.<uuid>`. O endereço é público dentro do tailnet e por isso pode ficar em `UserDefaults`;
+o token nunca sai do cofre.
+
+A decisão que manteve o resto do app intacto: **a instância em uso continua sendo dona dos dois
+campos antigos**. Trocar de computador copia o endereço para `Preferencias.enderecoDaPonte` e o token
+para a conta `ponte.token`, que é exatamente o que `ServicoPonte.aPartirDasPreferencias()` lê. Nenhum
+serviço, nenhuma tela de conversa e nenhuma chamada da ponte precisou saber que existe uma lista.
+
+O espelho é delicado por um motivo: `Preferencias.enderecoDaPonte` ganhou um `didSet` que avisa a
+lista, para endereço digitado em Ajustes virar o endereço do computador em uso em vez de um campo
+solto. Sem cuidado, a própria troca de instância passaria por esse aviso e seria desfeita. Por isso
+`Instancias.ativar` liga um sinalizador (`aplicandoAtivacao`) em volta da escrita, e o aviso ignora
+o que vem de lá.
+
+Três situações de quem já usava o app são consertadas na abertura de Ajustes, em
+`sincronizarComPreferencias`: lista vazia com endereço e token salvos vira a primeira instância, com
+o token migrado para a conta dela; instância ativa apontando para identificador que não existe mais
+passa para a primeira da lista; lista vazia sem endereço não inventa nada.
+
+#### A seção Computadores, em Ajustes
+
+A seção nova fica entre DeepSeek e Ponte, com uma linha por computador: nome, endereço, marca de
+visto no que está em uso e, quando falta token, o aviso em vermelho de que é preciso parear de novo.
+Tocar na linha troca o computador e testa a conexão na hora, para a troca não ser uma promessa
+silenciosa. Deslizar para a esquerda oferece **Esquecer**, com confirmação, porque a ação apaga o
+token do cofre: voltar exige parear outra vez.
+
+O botão **Adicionar pela câmera** é o antigo "Ler QR do computador", que saiu da seção da ponte e
+passou a ser a ação de acrescentar computador, que é o que ele faz. A seção da ponte continua com o
+caminho de digitar endereço e token, agora como edição do computador em uso.
+
+O nome que aparece na linha não é chute: `/v1/pareamento/trocar` já devolvia `rotulo` e `maquina`, e
+`ServicoPonte.trocarCodigo` passou a devolver os dois. `maquina` é o `COMPUTERNAME` do computador
+(`SUPERCOLLIDER` no PC desta entrega), e é ele que a lista mostra.
+
+#### Trocar de computador dentro de Sessões do DSH
+
+Escolher sessão e escolher computador são a mesma decisão, e a folha de sessões listava as sessões de
+um computador sem dizer qual. O cabeçalho da folha passou a mostrar o computador da lista e, quando
+há mais de um, abre um menu para trocar ali mesmo: a troca põe a instância em uso, atualiza a ponte
+do modelo e recarrega a lista de sessões.
+
+#### Copiar, refazer e o gasto de contexto
+
+A resposta do assistente ganhou uma linha de ações abaixo do texto, com altura de 44 pontos:
+
+| ação | o que faz |
+|---|---|
+| copiar | põe a resposta no `UIPasteboard` e troca o ícone por um visto por 1,6 s |
+| refazer | só na última resposta: apaga o que veio depois da última fala do usuário e manda a mesma pergunta de novo, sem gravar a pergunta outra vez |
+| gasto | `Contexto 1.284 · 312 de saída`, quando a API mandou os números |
+
+O refazer existe só na última porque refazer uma resposta do meio deixaria as seguintes falando de
+uma conversa que não existe mais. O gasto vem do campo `usage` da DeepSeek: `prompt_tokens` da
+última volta, que é o tamanho real do contexto, e `completion_tokens` somado nas até três voltas de
+ferramenta. A ponte não manda esse número, então pela ponte a linha não aparece, em vez de aparecer
+zerada.
+
+#### A descrição da câmera dizia outra coisa
+
+`NSCameraUsageDescription` falava só da foto anexada, e o leitor de QR usa a mesma permissão desde o
+build 5. A frase passou a citar as duas coisas: a foto que vai para o assistente e o QR que liga este
+iPhone ao DSH do computador.
+
+#### A conta do que mudou
+
+| o que | como foi medido | resultado |
+|---|---|---|
+| rodada do CI | `gh run view 45879769836`, commit `578d885` | _preencher_ |
+| pacote entregue | artefato `ipa` da rodada, conferido com `zipfile` e `plistlib` | _preencher_ |
+| conteúdo do pacote | mesmo conferidor | 15 entradas, versão `1.0.0` (build `6`), mínimo 18.0 |
+| código novo dentro do binário | procurar em UTF-8 no `Payload/DSH.app/DSH` | `Instancias`, `maquina`, `Adicionar pela câmera`, `Esquecer`, `Contexto`, `Tentar de novo` |
+| onde o arquivo está | `C:\Users\victo\iCloudDrive\DSH-livre-20261126-build6.ipa` e `_tmp\share\DSH-livre-20261126-build6.ipa` | mesmo sha256 nos dois |
+| link pelo tailnet | `curl -I` em `https://supercollider.tail056d02.ts.net:8444/DSH-livre-20261126-build6.ipa` | _preencher_ |
+
+Ajustes passa a mostrar "1.0.0 (6)" no rodapé.
+
+O que esta rodada **não** prova: nada foi instalado no aparelho ainda; o QR não foi lido com a câmera
+do iPhone, e a troca entre dois computadores não foi exercitada com os dois ligados. O que está
+provado é que o código compila nos dois jobs, que ele está dentro do binário e que as telas abrem no
+simulador.
+
 ## 11. O que fica aberto
 
 O que está abaixo é conhecido e não escondido. Nenhum item impede usar o app no dia a dia, mas
