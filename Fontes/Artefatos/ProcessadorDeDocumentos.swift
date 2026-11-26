@@ -37,29 +37,44 @@ enum ProcessadorDeDocumentos {
         }
     }
 
-    static func deImagem(_ imagem: UIImage) async throws -> Anexo {
+    /// Foto da câmera ou da galeria. O contrato do `Anexo` guarda texto e não pixels,
+    /// então o que chega ao modelo é o OCR. Quando a foto não tem texto, entra o que o
+    /// classificador de cena reconhece, com aviso: foto de paisagem, comida ou bicho
+    /// deixa de virar erro e passa a dar ao modelo alguma coisa sobre o que perguntar.
+    static func deImagem(_ imagem: UIImage, nome: String? = nil) async throws -> Anexo {
         try await foraDaMainThread {
             // O JPEG é o que alimenta o OCR: recomprimir aqui evita manter o UIImage
             // original vivo na fila de trabalho e normaliza a orientação do EXIF.
             let dados: Data
-            let nome: String
+            let nomePadrao: String
             if let jpeg = imagem.jpegData(compressionQuality: 0.9) {
                 dados = jpeg
-                nome = "Imagem.jpg"
+                nomePadrao = "Imagem.jpg"
             } else if let png = imagem.pngData() {
                 dados = png
-                nome = "Imagem.png"
+                nomePadrao = "Imagem.png"
             } else {
                 throw erroLocal("Não foi possível ler a imagem.")
             }
 
             let texto = try reconhecerTexto(em: dados)
-            guard !texto.isEmpty else {
-                // Anexo de imagem sem texto não serve para nada: o contrato não guarda os
-                // pixels, então sem OCR não há o que mandar para o modelo.
-                throw erroLocal("Nenhum texto foi reconhecido na imagem.")
+            let conteudo: String
+            if !texto.isEmpty {
+                conteudo = texto
+            } else {
+                let rotulos = rotularCena(em: dados)
+                guard !rotulos.isEmpty else {
+                    throw erroLocal("Não achei texto nem cena conhecida nessa foto.")
+                }
+                conteudo = "[foto sem texto legível; conteúdo provável: \(rotulos.joined(separator: ", "))]"
             }
-            return Anexo(id: UUID(), nome: nome, tipo: .imagem, texto: truncar(texto), tamanhoEmBytes: dados.count)
+            return Anexo(
+                id: UUID(),
+                nome: nome ?? nomePadrao,
+                tipo: .imagem,
+                texto: truncar(conteudo),
+                tamanhoEmBytes: dados.count
+            )
         }
     }
 
@@ -157,6 +172,21 @@ enum ProcessadorDeDocumentos {
         let observacoes = pedido.results ?? []
         let linhas = observacoes.compactMap { $0.topCandidates(1).first?.string }
         return linhas.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Rótulos do classificador de cena, do mais provável para o menos, só para foto
+    /// sem texto. O corte de confiança existe porque abaixo dele o rótulo vira chute.
+    private static func rotularCena(em dados: Data) -> [String] {
+        guard let imagem = imagemReduzida(de: dados) else { return [] }
+
+        let pedido = VNClassifyImageRequest()
+        let manipulador = VNImageRequestHandler(cgImage: imagem, options: [:])
+        guard (try? manipulador.perform([pedido])) != nil else { return [] }
+
+        let observacoes = (pedido.results ?? [])
+            .filter { $0.confidence >= 0.35 }
+            .prefix(6)
+        return observacoes.map { $0.identifier.replacingOccurrences(of: "_", with: " ") }
     }
 
     private static func imagemReduzida(de dados: Data) -> CGImage? {

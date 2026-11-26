@@ -57,9 +57,9 @@ O `project.yml` inclui pastas inteiras por caminho, então arquivo novo aparece 
 |---|---|---|
 | swift-base | `project.yml`, `.github/workflows/ios.yml`, `Recursos/`, `Fontes/App/`, `Fontes/Nucleo/`, `Fontes/Provedores/`, `Fontes/Compartilhado/` | projeto XcodeGen com três alvos, plists, entitlements, cofre de chaves, modelos SwiftData, loja de conversas, preferências, provedor DeepSeek (SSE), provedor da ponte DSH (SSE), entrada do app, dados de demonstração, workflow de build e IPA |
 | swift-chat | `Fontes/Desenho/`, `Fontes/Conversa/` | tokens visuais, `ConversaViewModel`, bolha com markdown e código, pensamento retrátil, tela principal, menu lateral, barra de entrada, lista de sessões do DSH, `docs/REFERENCIAS.md` |
-| swift-artefatos | `Fontes/Artefatos/` | `DetectorDeArtefato`, `TelaDeArtefato` (WKWebView isolado, abas Visualização e Código, exportar HTML), `ProcessadorDeDocumentos` (PDFKit, Vision OCR, texto e código), `CartaoDeAnexo` |
+| swift-artefatos | `Fontes/Artefatos/` | `DetectorDeArtefato`, `TelaDeArtefato` (WKWebView isolado, abas Visualização e Código, exportar HTML), `ProcessadorDeDocumentos` (PDFKit, Vision OCR, rótulo de cena para foto sem texto, texto e código), `CartaoDeAnexo` |
 | swift-voz | `Fontes/Voz/`, `Fontes/Ferramentas/` | `GerenciadorDeVoz` (Speech pt-BR, pausa para enviar, AVSpeechSynthesizer frase a frase, barge-in), `TelaDeVoz`, `FerramentasDoModelo` (search_web e gerenciar agenda/lembretes via EventKit) |
-| swift-plataforma | `Fontes/Plataforma/`, `Fontes/Widget/`, `Fontes/Extensao/` | AppIntents (perguntar, resumir área de transferência), widget com deep links, `ShareViewController`, tratamento de `dsh://` |
+| swift-plataforma | `Fontes/Plataforma/`, `Fontes/Widget/`, `Fontes/Extensao/` | AppIntents (perguntar, resumir área de transferência), widget com deep links, `ShareViewController`, tratamento de `dsh://`, `CapturaDeFoto` (câmera do sistema, `UIImagePickerController`) |
 
 ## 4. Nomes de tipo compartilhados (assinaturas exatas)
 
@@ -226,7 +226,7 @@ enum DetectorDeArtefato {
 struct TelaDeArtefato: View { var artefato: Artefato }        // folha modal
 enum ProcessadorDeDocumentos {
     static func dePdf(url: URL) async throws -> Anexo
-    static func deImagem(_ imagem: UIImage) async throws -> Anexo
+    static func deImagem(_ imagem: UIImage, nome: String? = nil) async throws -> Anexo
     static func deTexto(url: URL) async throws -> Anexo
 }
 struct CartaoDeAnexo: View { var anexo: Anexo; var aoRemover: (() -> Void)? }
@@ -338,7 +338,7 @@ Regras duras:
 - Consulte o MCP devlibs por HTTP quando precisar de padrão de componente: `search_components` e `get_component` em `http://servidor.tail056d02.ts.net:8813/mcp`, com o Bearer que está no bloco `mcp-devlibs` do `cordis.patch.yml` do perfil. Use no máximo 6 consultas.
 - Busque imagens dos apps de referência (ChatGPT, Claude, Gemini) e registre em `docs/REFERENCIAS.md` o que copiar e o que evitar, com URL. Não copie marca, cor de marca nem texto de outro app.
 
-Cara do app: fundo escuro por padrão com opção de claro, tipografia do sistema, canto arredondado generoso, bolha do usuário alinhada à direita com acento suave, resposta sem bolha (texto direto na superfície, como Claude), pensamento em cartão retrátil com indicador pulsante, barra de entrada flutuante com seletor de modelo, botão de anexo e botão de enviar que vira quadrado de parar durante o streaming.
+Cara do app: fundo escuro por padrão com opção de claro, tipografia do sistema, canto arredondado generoso, bolha do usuário alinhada à direita com acento suave, resposta sem bolha (texto direto na superfície, como Claude), pensamento em cartão retrátil com indicador pulsante, barra de entrada flutuante com seletor de modelo, botão de foto (tirar agora ou escolher da galeria), botão de anexo e botão de enviar que vira quadrado de parar durante o streaming.
 
 ## 9. Verificação (o CI é o compilador)
 

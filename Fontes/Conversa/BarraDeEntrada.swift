@@ -1,14 +1,19 @@
 import SwiftUI
 import UIKit
+import PhotosUI
 import UniformTypeIdentifiers
 
-/// A barra de entrada flutuante: campo de texto, seletor de modelo, anexo e o
+/// A barra de entrada flutuante: campo de texto, seletor de modelo, foto, anexo e o
 /// botão que vira parar.
 ///
 /// A ação principal mora embaixo do polegar direito. Enquanto a resposta corre,
 /// o mesmo botão troca de forma e de rótulo em vez de aparecer outro: um alvo só,
 /// que muda de intenção. Anexo vira etiqueta acima do campo, com nome e tipo, e a
 /// falha de leitura aparece ali mesmo, sem alerta.
+///
+/// Foto tem botão próprio, separado do clipe: o clipe abre o seletor de arquivos, que
+/// no iPhone não enxerga a galeria de fotos. O menu da câmera oferece tirar a foto
+/// agora ou escolher uma da galeria, e as duas entram pelo mesmo processador.
 struct BarraDeEntrada: View {
     @Binding var texto: String
     @Binding var anexos: [Anexo]
@@ -23,6 +28,9 @@ struct BarraDeEntrada: View {
     var aoEscolherSessao: @MainActor () -> Void
 
     @State private var escolhendoArquivo = false
+    @State private var escolhendoGaleria = false
+    @State private var tirandoFoto = false
+    @State private var fotoEscolhida: PhotosPickerItem?
     @State private var processando = false
     @State private var falhaNoAnexo: String?
 
@@ -52,6 +60,7 @@ struct BarraDeEntrada: View {
 
             HStack(spacing: Espaco.s) {
                 seletorDeModelo
+                botaoDeFoto
                 botaoDeAnexo
                 Spacer(minLength: Espaco.s)
                 if processando {
@@ -82,6 +91,21 @@ struct BarraDeEntrada: View {
             case .failure(let erro):
                 falhaNoAnexo = "Não consegui abrir esse arquivo: \(erro.localizedDescription)"
             }
+        }
+        // A galeria vem pelo PhotosPicker, que roda fora do processo do app: não pede
+        // permissão de biblioteca e devolve só a foto escolhida.
+        .photosPicker(isPresented: $escolhendoGaleria, selection: $fotoEscolhida, matching: .images)
+        .onChange(of: fotoEscolhida) { _, nova in
+            guard let nova else { return }
+            Task { await anexarDaGaleria(nova) }
+        }
+        .fullScreenCover(isPresented: $tirandoFoto) {
+            CapturaDeFoto { imagem in
+                tirandoFoto = false
+                guard let imagem else { return }
+                Task { await anexarFoto(imagem) }
+            }
+            .ignoresSafeArea()
         }
     }
 
@@ -136,6 +160,78 @@ struct BarraDeEntrada: View {
                 Image(systemName: "checkmark")
             }
         }
+    }
+
+    // MARK: - Foto
+
+    /// Menu em vez de dois botões: a barra já tem seletor de modelo, clipe e enviar, e
+    /// um toque aqui resolve as duas origens sem espremer mais alvos na linha.
+    private var botaoDeFoto: some View {
+        Menu {
+            if CapturaDeFoto.disponivel {
+                Button {
+                    tirandoFoto = true
+                } label: {
+                    Label("Tirar foto", systemImage: "camera")
+                }
+            }
+            Button {
+                escolhendoGaleria = true
+            } label: {
+                Label("Escolher da galeria", systemImage: "photo.on.rectangle")
+            }
+        } label: {
+            Image(systemName: "camera")
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(Cores.textoFraco)
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .accessibilityLabel("Enviar foto")
+        .accessibilityHint(
+            CapturaDeFoto.disponivel
+                ? "Tira uma foto agora ou escolhe uma da galeria."
+                : "Escolhe uma foto da galeria. A câmera não existe neste aparelho."
+        )
+    }
+
+    @MainActor
+    private func anexarFoto(_ imagem: UIImage) async {
+        processando = true
+        falhaNoAnexo = nil
+        defer { processando = false }
+        do {
+            anexos.append(try await ProcessadorDeDocumentos.deImagem(imagem, nome: nomeDaFoto("Camera")))
+        } catch {
+            falhaNoAnexo = "Não consegui usar essa foto: \(error.localizedDescription)"
+        }
+    }
+
+    @MainActor
+    private func anexarDaGaleria(_ item: PhotosPickerItem) async {
+        fotoEscolhida = nil
+        processando = true
+        falhaNoAnexo = nil
+        defer { processando = false }
+        do {
+            guard let dados = try await item.loadTransferable(type: Data.self),
+                  let imagem = UIImage(data: dados) else {
+                falhaNoAnexo = "Não consegui abrir a foto escolhida."
+                return
+            }
+            anexos.append(try await ProcessadorDeDocumentos.deImagem(imagem, nome: nomeDaFoto("Galeria")))
+        } catch {
+            falhaNoAnexo = "Não consegui usar essa foto: \(error.localizedDescription)"
+        }
+    }
+
+    /// Nome com origem e hora: três fotos seguidas no mesmo pedido ficam distinguíveis
+    /// na etiqueta e no cartão da conversa.
+    private func nomeDaFoto(_ origem: String) -> String {
+        let formato = DateFormatter()
+        formato.locale = Locale(identifier: "pt_BR")
+        formato.dateFormat = "dd-MM-yyyy HH.mm.ss"
+        return "Foto \(origem) \(formato.string(from: Date())).jpg"
     }
 
     // MARK: - Anexo
