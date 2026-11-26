@@ -146,19 +146,25 @@ final class ServicoDeepSeek: ProvedorDeConversa {
             }
         }
 
+        // Chamada sem nome não vira fragmento nenhum, então ela também conta como
+        // "nada a mostrar" na conferência abaixo.
+        var completas: [ChamadaDeFerramenta] = []
         for indice in chamadas.keys.sorted() {
             guard let chamada = chamadas[indice], !chamada.nome.isEmpty else { continue }
-            emitir(.chamadaDeFerramenta(
-                ChamadaDeFerramenta(id: chamada.id, nome: chamada.nome, argumentos: chamada.argumentos)
+            completas.append(ChamadaDeFerramenta(
+                id: chamada.id, nome: chamada.nome, argumentos: chamada.argumentos
             ))
         }
         // Nem texto, nem raciocínio, nem ferramenta: a tela não teria o que mostrar e
         // o usuário veria a mensagem dele sozinha. Erro dito é melhor que silêncio.
-        if pedacos == 0 && chamadas.isEmpty {
+        if pedacos == 0 && completas.isEmpty {
             let motivo = motivoFinal.map { " (motivo: \($0))" } ?? ""
             throw ErroDaConversa.rede(
                 "a API respondeu 200 e não mandou nenhum pedaço de texto\(motivo)"
             )
+        }
+        for chamada in completas {
+            emitir(.chamadaDeFerramenta(chamada))
         }
         emitir(.fim(motivo: motivoFinal))
     }

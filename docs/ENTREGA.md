@@ -284,16 +284,27 @@ parar. Cada um desses sinais foi conferido no código e no que a máquina regist
 
 Sobrou então o motor direto, e nele toda falha previsível aparecia: chave faltando,
 chave recusada, rede fora e HTTP de erro desembocam em `ErroDaConversa`, que sempre
-tem descrição em português e vira faixa na tela. As duas únicas saídas caladas
-estavam no próprio app, e as duas foram corrigidas no commit `e7202e8`:
+tem descrição em português e vira faixa na tela. As saídas caladas estavam todas no
+próprio app, e a terceira delas é a que mais combina com o horário do print:
 
-- um 200 que termina sem nenhum pedaço de texto: `ServicoDeepSeek` agora conta os
-  pedaços e lança erro se não veio nenhum, e `ServicoPonte` faz o mesmo quando os
-  eventos fecham sem texto;
+- a faixa era apagada toda vez que a tela da conversa reaparecia, porque
+  `abrir(_:)` fazia `erro = nil` sem olhar se era a mesma conversa. O pareamento
+  tinha acabado de acontecer (22:24 a 22:25); se o aviso apareceu quando a mensagem
+  foi mandada e o usuário foi aos Ajustes conferir chave ou motor, a volta apagava o
+  aviso e sobrava a pergunta sem resposta. O commit `c303ebd` mantém a falha
+  visível ao voltar para a mesma conversa;
+- um 200 que termina sem nenhum pedaço de texto: o commit `e7202e8` fez
+  `ServicoDeepSeek` contar os pedaços e lançar erro se não veio nenhum, e
+  `ServicoPonte` fazer o mesmo quando os eventos fecham sem texto;
 - parada antes do primeiro pedaço: o `catch is CancellationError` era vazio e o
   salvamento era condicionado a `!resposta.isEmpty || !pensamento.isEmpty`, então
   parar cedo não deixava rastro. Agora o fim sem texto sempre vira faixa dizendo
   que nada foi guardado.
+
+O `c303ebd` também trocou "nenhuma sessão da ponte está aberta" por uma frase que
+diz onde resolver: o motor da ponte precisa de uma sessão do DSH escolhida no
+seletor da barra de baixo, e essa é a falha que aparece para quem liga o motor da
+ponte antes de escolher a sessão.
 
 O que não dá para medir daqui: se o aparelho chegou a falar com a API naquele
 minuto, porque o app não guarda registro do último pedido. O build 2 do
