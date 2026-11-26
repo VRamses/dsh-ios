@@ -113,6 +113,7 @@ struct Anexo: Codable, Identifiable, Hashable {
     var tipo: Tipo
     var texto: String       // conteúdo extraído ou OCR
     var tamanhoEmBytes: Int
+    var imagemBase64: String?   // só foto: JPEG de até 1600 px, para o motor que enxerga imagem
 }
 ```
 

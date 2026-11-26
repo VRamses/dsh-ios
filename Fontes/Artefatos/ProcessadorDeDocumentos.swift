@@ -22,6 +22,13 @@ enum ProcessadorDeDocumentos {
     /// Lado máximo da imagem mandada ao Vision. Foto de 12 MP sem redução leva minutos.
     static let ladoMaximoDoOcr: CGFloat = 2_400
 
+    /// Lado máximo da foto que segue para o modelo, e teto do JPEG reencodado. A imagem
+    /// viaja dentro do JSON gravado na conversa, então ela precisa ser pequena: 1600 px
+    /// mantém texto de documento legível e cabe em algumas centenas de KB.
+    static let ladoMaximoDaVisao: CGFloat = 1_600
+    static let qualidadeDaVisao: CGFloat = 0.8
+    static let limiteDaVisaoEmBytes = 3_000_000
+
     /// Prazo do OCR de PDF digitalizado, conferido entre páginas. Vision não expõe
     /// cancelamento público, então o corte é por quantidade de páginas e por relógio.
     static let prazoDoOcr: TimeInterval = 20
@@ -37,10 +44,12 @@ enum ProcessadorDeDocumentos {
         }
     }
 
-    /// Foto da câmera ou da galeria. O contrato do `Anexo` guarda texto e não pixels,
-    /// então o que chega ao modelo é o OCR. Quando a foto não tem texto, entra o que o
-    /// classificador de cena reconhece, com aviso: foto de paisagem, comida ou bicho
-    /// deixa de virar erro e passa a dar ao modelo alguma coisa sobre o que perguntar.
+    /// Foto da câmera ou da galeria. Sai daqui com dois conteúdos: o texto abaixo, que é
+    /// o OCR e serve à busca, à ponte e a mensagem antiga, e a imagem em base64, que é o
+    /// que o motor da DeepSeek usa para enxergar a foto de verdade. Quando a foto não tem
+    /// texto, entra o que o classificador de cena reconhece, com aviso: foto de paisagem,
+    /// comida ou bicho deixa de virar erro e passa a dar ao modelo alguma coisa sobre o
+    /// que perguntar, mesmo no caminho que só transporta texto.
     static func deImagem(_ imagem: UIImage, nome: String? = nil) async throws -> Anexo {
         try await foraDaMainThread {
             // O JPEG é o que alimenta o OCR: recomprimir aqui evita manter o UIImage
@@ -73,7 +82,8 @@ enum ProcessadorDeDocumentos {
                 nome: nome ?? nomePadrao,
                 tipo: .imagem,
                 texto: truncar(conteudo),
-                tamanhoEmBytes: dados.count
+                tamanhoEmBytes: dados.count,
+                imagemBase64: base64DaVisao(de: dados)
             )
         }
     }
@@ -189,15 +199,25 @@ enum ProcessadorDeDocumentos {
         return observacoes.map { $0.identifier.replacingOccurrences(of: "_", with: " ") }
     }
 
-    private static func imagemReduzida(de dados: Data) -> CGImage? {
+    private static func imagemReduzida(de dados: Data, ladoMaximo: CGFloat = ladoMaximoDoOcr) -> CGImage? {
         guard let fonte = CGImageSourceCreateWithData(dados as CFData, nil) else { return nil }
         let opcoes: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
             kCGImageSourceCreateThumbnailWithTransform: true,
-            kCGImageSourceThumbnailMaxPixelSize: Int(ladoMaximoDoOcr),
+            kCGImageSourceThumbnailMaxPixelSize: Int(ladoMaximo),
             kCGImageSourceShouldCacheImmediately: true
         ]
         return CGImageSourceCreateThumbnailAtIndex(fonte, 0, opcoes as CFDictionary)
+    }
+
+    /// Foto reencodada só para o modelo enxergar. Menor que a do OCR de propósito: o
+    /// servidor reduz qualquer imagem para algo perto de 1300 px e cobra no máximo 1024
+    /// tokens por foto, então mandar 12 megapixels gastaria rede do aparelho sem ganho.
+    private static func base64DaVisao(de dados: Data) -> String? {
+        guard let reduzida = imagemReduzida(de: dados, ladoMaximo: ladoMaximoDaVisao) else { return nil }
+        guard let jpeg = UIImage(cgImage: reduzida).jpegData(compressionQuality: qualidadeDaVisao) else { return nil }
+        guard jpeg.count <= limiteDaVisaoEmBytes else { return nil }
+        return jpeg.base64EncodedString()
     }
 
     // MARK: - Texto e codificação

@@ -21,12 +21,26 @@ struct Anexo: Codable, Identifiable, Hashable {
     var texto: String
     var tamanhoEmBytes: Int
 
-    init(id: UUID = UUID(), nome: String, tipo: Tipo, texto: String = "", tamanhoEmBytes: Int = 0) {
+    /// Bytes da foto, em JPEG pequeno e base64, só para o motor que enxerga imagem.
+    /// É opcional de propósito: pdf, texto e código não têm pixel, e mensagem antiga
+    /// gravada antes deste campo continua decodificando (chave ausente vira nil).
+    /// O texto acima segue existindo ao lado, porque é ele que a busca e a ponte usam.
+    var imagemBase64: String?
+
+    init(
+        id: UUID = UUID(),
+        nome: String,
+        tipo: Tipo,
+        texto: String = "",
+        tamanhoEmBytes: Int = 0,
+        imagemBase64: String? = nil
+    ) {
         self.id = id
         self.nome = nome
         self.tipo = tipo
         self.texto = texto
         self.tamanhoEmBytes = tamanhoEmBytes
+        self.imagemBase64 = imagemBase64
     }
 
     static func codificar(_ anexos: [Anexo]) -> Data {

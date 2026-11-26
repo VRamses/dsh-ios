@@ -396,7 +396,13 @@ final class ServicoPonte: ProvedorDeConversa {
         var partes: [String] = [ultima.texto]
         for anexo in ultima.anexos {
             let conteudo = anexo.texto.isEmpty ? "(sem texto extraído)" : anexo.texto
-            partes.append("[anexo: \(anexo.nome), tipo \(anexo.tipo.rawValue)]\n\(conteudo)")
+            // A ponte transporta texto: a foto não atravessa. O cabeçalho diz isso ao
+            // modelo para ele não responder como se tivesse visto a imagem.
+            if anexo.tipo == .imagem {
+                partes.append("[anexo: \(anexo.nome), tipo imagem, enviada só como texto: o OCR abaixo é tudo o que chegou]\n\(conteudo)")
+            } else {
+                partes.append("[anexo: \(anexo.nome), tipo \(anexo.tipo.rawValue)]\n\(conteudo)")
+            }
         }
         return partes.joined(separator: "\n\n")
     }

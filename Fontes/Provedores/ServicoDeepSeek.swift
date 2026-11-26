@@ -154,10 +154,16 @@ final class ServicoDeepSeek: ProvedorDeConversa {
         if let sistema = pedido.promptDeSistema, !sistema.isEmpty {
             mensagens.append(["role": "system", "content": sistema])
         }
-        for mensagem in pedido.mensagens {
+        // Foto pesa no corpo do pedido, então só as duas últimas falas do usuário levam a
+        // imagem; as anteriores seguem com o texto já reconhecido delas, que é o que a
+        // conversa longa precisa para continuar fazendo sentido.
+        let falasDoUsuario = pedido.mensagens.indices.filter { pedido.mensagens[$0].papel == .usuario }
+        let comImagem = Set(falasDoUsuario.suffix(2))
+        for indice in pedido.mensagens.indices {
+            let mensagem = pedido.mensagens[indice]
             mensagens.append([
                 "role": papelNaAPI(mensagem.papel),
-                "content": textoComAnexos(mensagem),
+                "content": conteudo(mensagem, permitirImagem: comImagem.contains(indice)),
             ])
         }
 
@@ -200,12 +206,49 @@ final class ServicoDeepSeek: ProvedorDeConversa {
         }
     }
 
-    private static func textoComAnexos(_ mensagem: MensagemDoPedido) -> String {
+    /// Conteúdo da mensagem no formato da API. Sem foto é texto puro, que é o caso de
+    /// quase tudo. Com foto vira lista de blocos: o texto do anexo primeiro e a imagem
+    /// em base64 depois, que é como o modelo passa a ver a foto em vez de só ler o OCR.
+    /// Só mensagem do usuário leva imagem, porque a API recusa imagem em resposta do
+    /// assistente, e foto antiga decodificada sem bytes (chave ausente) cai no texto.
+    private static func conteudo(_ mensagem: MensagemDoPedido, permitirImagem: Bool) -> Any {
+        let imagens = (permitirImagem && mensagem.papel == .usuario)
+            ? mensagem.anexos.filter { !($0.imagemBase64 ?? "").isEmpty }
+            : []
+        let texto = textoComAnexos(mensagem, imagemViaja: !imagens.isEmpty)
+        guard !imagens.isEmpty else { return texto }
+
+        var blocos: [[String: Any]] = []
+        if !texto.isEmpty {
+            blocos.append(["type": "text", "text": texto])
+        }
+        for anexo in imagens {
+            guard let base64 = anexo.imagemBase64 else { continue }
+            blocos.append([
+                "type": "image_url",
+                "image_url": ["url": "data:image/jpeg;base64,\(base64)"],
+            ])
+        }
+        return blocos
+    }
+
+    private static func textoComAnexos(
+        _ mensagem: MensagemDoPedido,
+        imagemViaja: Bool
+    ) -> String {
         guard !mensagem.anexos.isEmpty else { return mensagem.texto }
         var partes: [String] = [mensagem.texto]
         for anexo in mensagem.anexos {
             let conteudo = anexo.texto.isEmpty ? "(sem texto extraído)" : anexo.texto
-            partes.append("[anexo: \(anexo.nome), tipo \(anexo.tipo.rawValue)]\n\(conteudo)")
+            let cabecalho: String
+            if anexo.tipo == .imagem, imagemViaja, !(anexo.imagemBase64 ?? "").isEmpty {
+                cabecalho = "[anexo: \(anexo.nome), tipo imagem, a foto segue anexada nesta mensagem; o texto abaixo foi reconhecido por OCR e pode ter erro]"
+            } else if anexo.tipo == .imagem {
+                cabecalho = "[anexo: \(anexo.nome), tipo imagem, a foto não vai nesta mensagem, só o texto reconhecido]"
+            } else {
+                cabecalho = "[anexo: \(anexo.nome), tipo \(anexo.tipo.rawValue)]"
+            }
+            partes.append("\(cabecalho)\n\(conteudo)")
         }
         return partes.joined(separator: "\n\n")
     }
