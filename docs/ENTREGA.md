@@ -490,6 +490,70 @@ O que a rodada **não** prova, para não dar a ela mais peso do que tem:
   a sessão do DSH pela ponte, registrada na auditoria da ponte às 11:48 UTC daquele dia;
 - as capturas são do modo claro do simulador; o modo escuro não é fotografado.
 
+### A sétima instalação, no SUPERCOLLIDER, em 26/11/2026
+
+Esta é a rodada que faz o texto aparecer no iPhone e oferece sessão nova, com os commits
+`e419473` (código) e `b441f55` (número do build).
+
+| o que | como foi medido | resultado |
+|---|---|---|
+| rodada do CI | `gh run view 45759731050`, commit `b441f55` | `success` nos dois jobs |
+| pacote entregue | artefato `ipa` da rodada, conferido com `zipfile` e `plistlib` | `DSH-livre.ipa` com 823.706 bytes e sha256 `65915399A4020CAB2753D355D1471EA8B0F7D184DD719B76B730EE27ABE2EADD` |
+| conteúdo do pacote | mesmo conferidor | 15 entradas, nenhuma com `PlugIns`, `dev.ramses.dsh`, versão `1.0.0` (build `4`), mínimo 18.0 |
+| código novo dentro do binário | procurar em UTF-8 no `Payload/DSH.app/DSH`, de 3.325.064 bytes | `x-api-key`, `Nova sess`, `caractere invis`, `descartou o cabe` e `chaveParaCabecalho` presentes, e esse código foi escrito nesta rodada |
+| onde o arquivo está | `C:\Users\victo\iCloudDrive\DSH-livre-20261126-build4.ipa` e `_tmp\share\DSH-livre-20261126-build4.ipa` | mesmo sha256 nos dois |
+| link pelo tailnet | `curl -I` em `/share/DSH-livre-20261126-build4.ipa` na porta 8443 | 401, porque a porta 43141 que servia esse arquivo não está de pé nesta rodada; o caminho que vale aqui é o iCloud Drive |
+
+Ajustes passa a mostrar "1.0.0 (4)" no rodapé.
+
+#### A ponte parou de mandar quadro que o app não lê
+
+O app só entende registro com `tipo`, `em` e `dados`; a ponte mandava os quadros nativos do DSH
+(`assistant-stream`, `event`, `snapshot`). O texto chegava ao telefone e era descartado, e como
+o stream ficava aberto, a tela ficava em "escrevendo" para sempre. A rota
+`/v1/sessoes/<id>/eventos` agora acumula texto e raciocínio e manda, a cada pedaço, um registro
+`{"tipo":"assistant"|"raciocinio","em":<ms>,"dados":{"content":[...]}}`, no formato que
+`ServicoPonte.coletar` lê, e encerra a resposta no fim do turno.
+
+Prova com um turno real na ponte, sem o telefone, pelo script `_tmp\ponte\teste-turno.mjs`:
+
+| ponto | o que chegou |
+|---|---|
+| abertura | `aberto` com o id da sessão |
+| texto | `mensagem` com `{"type":"text","text":"ok"}` |
+| fim | o stream fechou depois de dois quadros, que é o que faz o app gravar a mensagem e parar o indicador |
+
+#### Por que o 401 no teste da chave era falta de cabeçalho
+
+A mensagem que o telefone mostrava, `Authentication Fails (governor)`, não é mensagem de chave
+inválida. A matriz abaixo foi medida daqui, contra `api.deepseek.com/chat/completions`, com a
+mesma chave do cofre:
+
+| variação do pedido | resposta |
+|---|---|
+| chave certa em `Authorization: Bearer` | 200 |
+| mesma chave, mesmo valor, no cabeçalho `x-api-key` | 200 |
+| sem cabeçalho de autenticação nenhum | 401 `Authentication Fails (governor)` |
+| chave sem a palavra `Bearer` | 401 `auth header format should be Bearer sk-...` |
+| chave com espaço no fim, depois de `Bearer` | 200 |
+| quatro pedidos seguidos em menos de um segundo | 200 nos quatro, sem limite por rajada |
+
+Ou seja: o pedido que sai do iPhone chega na API sem cabeçalho nenhum. O build 4 filtra a chave
+para ASCII visível antes de montar o cabeçalho, diz no relatório quantos caracteres saíram e,
+quando o `Authorization` falha, repete a chamada com a mesma chave em `x-api-key`. Como a API
+aceita os dois, um 200 na segunda tentativa prova que o iOS descartou o cabeçalho no caminho.
+
+#### Criar sessão nova, que não existia
+
+`ServicoPonte.criarSessao()` existia desde o build 1 e não tinha uma única chamada no app: a
+folha de sessões só listava o que estava aberto no computador, então quem não tinha sessão
+aberta não tinha como começar conversa pelo iPhone. A folha ganhou o botão **Nova sessão no
+DSH**, que chama a ponte, cria a sessão no grupo padrão e já abre a conversa nela.
+
+A rota foi exercitada daqui antes do build: `POST /v1/sessoes` devolveu 200 com
+`sessionId: session-f275c087-aeac-48ac-ade4-96af0cdbdb27`, no grupo `d0d03372-...` (Notebook),
+e essa sessão aceitou prompt em seguida.
+
 ## 11. O que fica aberto
 
 O que está abaixo é conhecido e não escondido. Nenhum item impede usar o app no dia a dia, mas
@@ -500,7 +564,7 @@ cada um é uma promessa que o app ainda não cumpre.
 | validar a chave da DeepSeek em Ajustes | passou a existir em 25/11/2026: o botão "Testar a chave" faz uma chamada real, com `max_tokens: 16`, e mostra o código HTTP e o começo do corpo | antes só conferia o prefixo `sk-`; o custo agora é de 16 tokens por toque, e é o usuário quem decide tocar |
 | bloco de código muito longo | cresce sem limite dentro da bolha | cortar com "mostrar mais" mexe no `TextoRico`, e a conversa de demonstração já usa o limite como prova de rolagem |
 | primeiro quadro da resposta ao vivo | o recuo pendente aparece a partir do segundo quadro | o streaming chega em pedaços e o primeiro é renderizado antes de haver linha completa |
-| criar sessão pela ponte | `POST /v1/sessoes` e `/mensagem` foram verificados só por leitura de código | a rodada do CI não tem tailnet, então não há como exercitar a ponte de dentro do simulador |
+| criar sessão pela ponte | a rota foi exercitada daqui com `POST /v1/sessoes` (200 com `sessionId`) e o app ganhou o botão "Nova sessão no DSH" no build 4 | falta tocar o botão no aparelho e ver a sessão nova abrir; a rodada do CI não tem tailnet, então o simulador não exercita a ponte |
 | folha do artefato durante a resposta | pode fechar sozinha quando o texto ao vivo vira mensagem gravada | a bolha ao vivo é substituída no fim do stream, e com ela o estado que segurava a folha |
 | widget e compartilhamento no iPhone | exigem conta paga do programa de desenvolvedor | os dois alvos usam App Group, que a conta gratuita não libera; com conta gratuita, o pacote que instala é o `DSH-livre.ipa`, sem as extensões |
 | remover anexo no transcrito | a bolha desenha o cartão sem a ação de remover | anexo já enviado não sai da conversa, e o parâmetro `aoRemover` do cartão fica reservado à barra de entrada, que ainda usa as etiquetas dela |
