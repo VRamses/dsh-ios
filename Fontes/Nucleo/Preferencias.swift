@@ -37,8 +37,14 @@ final class Preferencias: ObservableObject {
         didSet { padroes.set(usaPonte, forKey: Chave.usaPonte) }
     }
 
+    /// Endereço do computador em uso. Quem manda é a lista de `Instancias`: o
+    /// `didSet` avisa a lista para o endereço digitado em Ajustes atualizar o
+    /// computador ativo em vez de ficar solto ao lado dela.
     @Published var enderecoDaPonte: String {
-        didSet { padroes.set(enderecoDaPonte, forKey: Chave.enderecoDaPonte) }
+        didSet {
+            padroes.set(enderecoDaPonte, forKey: Chave.enderecoDaPonte)
+            Instancias.compartilhada.enderecoDaPonteMudou(enderecoDaPonte)
+        }
     }
 
     @Published var vozAutomatica: Bool {

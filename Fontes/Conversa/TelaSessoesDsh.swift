@@ -12,10 +12,12 @@ struct TelaSessoesDsh: View {
     var aoAbrir: @MainActor (SessaoResumo) -> Void
 
     @Environment(\.dismiss) private var fechar
+    @ObservedObject private var instancias = Instancias.compartilhada
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
+                cabecalhoDoComputador
                 botaoDeSessaoNova
                 Group {
                     if modelo.carregandoSessoes && modelo.sessoes.isEmpty {
@@ -56,6 +58,60 @@ struct TelaSessoesDsh: View {
     }
 
     // MARK: - Estados
+
+    /// Diz em qual computador a lista foi buscada e, quando há mais de um,
+    /// troca ali mesmo: escolher sessão e escolher computador são a mesma
+    /// decisão, e separá-las mandava a pessoa para Ajustes no meio do caminho.
+    @ViewBuilder
+    private var cabecalhoDoComputador: some View {
+        if let atual = instancias.ativaEmUso {
+            HStack(spacing: Espaco.xs) {
+                Image(systemName: "desktopcomputer")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Cores.textoFraco)
+                if instancias.lista.count > 1 {
+                    Menu {
+                        ForEach(instancias.lista) { instancia in
+                            Button {
+                                guard instancias.ativa != instancia.id else { return }
+                                instancias.ativar(instancia.id)
+                                modelo.trocarPonte(ServicoPonte.aPartirDasPreferencias())
+                                Task { await modelo.carregarSessoes() }
+                            } label: {
+                                HStack(spacing: Espaco.s) {
+                                    Text(instancia.rotulo)
+                                    if instancias.ativa == instancia.id {
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: Espaco.xs) {
+                            Text(atual.rotulo)
+                                .font(Tipografia.legenda())
+                                .foregroundStyle(Cores.texto)
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 9, weight: .semibold))
+                                .foregroundStyle(Cores.textoFraco)
+                        }
+                        .frame(minHeight: 44)
+                        .contentShape(Rectangle())
+                    }
+                    .accessibilityLabel("Computador: \(atual.rotulo)")
+                    .accessibilityHint("Troca o computador de onde vem esta lista.")
+                } else {
+                    Text(atual.rotulo)
+                        .font(Tipografia.legenda())
+                        .foregroundStyle(Cores.texto)
+                        .frame(minHeight: 44)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, Espaco.l)
+            .padding(.top, Espaco.s)
+        }
+    }
 
     /// Cria uma sessão nova no DSH. É o caminho que faltava: o app listava as
     /// sessões abertas no computador e não oferecia como começar uma do zero.

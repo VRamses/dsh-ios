@@ -82,6 +82,13 @@ final class ConversaViewModel: ObservableObject {
 
     var temPonte: Bool { ponte != nil }
 
+    /// Troca a ponte da tela sem fechar nada: a folha de sessões chama isto
+    /// quando o usuário escolhe outro computador na lista de instâncias.
+    @MainActor
+    func trocarPonte(_ nova: ServicoPonte?) {
+        ponte = nova
+    }
+
     // MARK: - Envio
 
     /// Manda o que está na barra de entrada. A mensagem do usuário entra no
@@ -109,8 +116,38 @@ final class ConversaViewModel: ObservableObject {
         }
     }
 
+    /// Refaz a última resposta sem redigitar a pergunta.
+    ///
+    /// Apaga o que veio depois da última fala do usuário, inclusive a resposta
+    /// que não agradou, e manda a mesma pergunta de novo. A pergunta não é
+    /// gravada outra vez: reenviar criaria duas falas iguais no transcrito, e o
+    /// histórico que vai para o modelo teria a mesma coisa duas vezes.
     @MainActor
-    private func executarEnvio(_ texto: String, anexos: [Anexo]) async {
+    func repetirUltimaResposta() {
+        guard !estaRespondendo, let conversa, contexto != nil else { return }
+        let ordenadas = conversa.mensagens.sorted { $0.criadaEm < $1.criadaEm }
+        guard let indice = ordenadas.lastIndex(where: { $0.papel == .usuario }) else { return }
+        let pergunta = ordenadas[indice]
+
+        if indice + 1 < ordenadas.count {
+            for mensagem in ordenadas[(indice + 1)...] {
+                contexto?.delete(mensagem)
+            }
+            try? contexto?.save()
+        }
+
+        erro = nil
+        estaRespondendo = true
+        textoAoVivo = ""
+        raciocinioAoVivo = ""
+        tarefa?.cancel()
+        tarefa = Task { [weak self] in
+            await self?.executarEnvio(pergunta.conteudo, anexos: pergunta.anexos, gravandoPergunta: false)
+        }
+    }
+
+    @MainActor
+    private func executarEnvio(_ texto: String, anexos: [Anexo], gravandoPergunta: Bool = true) async {
         if conversa == nil {
             _ = criarConversa(comTitulo: texto)
         }
@@ -120,7 +157,9 @@ final class ConversaViewModel: ObservableObject {
             return
         }
 
-        gravar(papel: .usuario, texto: texto, raciocinio: nil, anexos: anexos, em: conversa)
+        if gravandoPergunta {
+            gravar(papel: .usuario, texto: texto, raciocinio: nil, anexos: anexos, em: conversa)
+        }
 
         guard let provedor = montarProvedor() else {
             estaRespondendo = false
@@ -139,6 +178,12 @@ final class ConversaViewModel: ObservableObject {
         // sem entrar no histórico salvo, porque isso não é fala de ninguém.
         var extras: [MensagemDoPedido] = []
         var voltas = 0
+
+        // O que a API contou de gasto nesta resposta. A entrada é a da última
+        // volta porque é ela que carrega a conversa inteira, ou seja, o tamanho
+        // real do contexto; a saída é a soma das voltas, porque cada uma gastou.
+        var entradaDoContexto: Int?
+        var saidaTotal = 0
 
         do {
             while true {
@@ -159,7 +204,10 @@ final class ConversaViewModel: ObservableObject {
                         textoAoVivo = resposta
                     case .chamadaDeFerramenta(let chamada):
                         chamadas.append(chamada)
-                    case .uso(_, _), .fim(_):
+                    case .uso(let entrada, let saida):
+                        if entrada > 0 { entradaDoContexto = entrada }
+                        saidaTotal += saida
+                    case .fim(_):
                         continue
                     }
                 }
@@ -197,7 +245,9 @@ final class ConversaViewModel: ObservableObject {
                 texto: resposta,
                 raciocinio: pensamento.isEmpty ? nil : pensamento,
                 anexos: [],
-                em: conversa
+                em: conversa,
+                tokensDeEntrada: entradaDoContexto,
+                tokensDeSaida: saidaTotal > 0 ? saidaTotal : nil
             )
         } else if erro == nil {
             // Fim sem nenhum pedaço de texto e sem erro: a tela mostraria a pergunta
@@ -362,7 +412,15 @@ final class ConversaViewModel: ObservableObject {
     }
 
     @MainActor
-    private func gravar(papel: Papel, texto: String, raciocinio: String?, anexos: [Anexo], em conversa: Conversa) {
+    private func gravar(
+        papel: Papel,
+        texto: String,
+        raciocinio: String?,
+        anexos: [Anexo],
+        em conversa: Conversa,
+        tokensDeEntrada: Int? = nil,
+        tokensDeSaida: Int? = nil
+    ) {
         guard let contexto else { return }
         let mensagem = Mensagem(
             id: UUID(),
@@ -371,7 +429,9 @@ final class ConversaViewModel: ObservableObject {
             raciocinio: raciocinio,
             criadaEm: Date(),
             anexos: anexos,
-            conversa: conversa
+            conversa: conversa,
+            tokensDeEntrada: tokensDeEntrada,
+            tokensDeSaida: tokensDeSaida
         )
         contexto.insert(mensagem)
         conversa.atualizadaEm = Date()

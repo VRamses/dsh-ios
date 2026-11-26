@@ -107,6 +107,12 @@ final class Mensagem {
     var anexosCodificados: Data
     var conversa: Conversa?
 
+    /// O que a API disse que gastou, quando ela disse. Opcionais de propósito:
+    /// a ponte não manda `usage`, e mensagem gravada antes deste campo continua
+    /// abrindo com os dois em `nil`. A tela não inventa número quando falta.
+    var tokensDeEntrada: Int?
+    var tokensDeSaida: Int?
+
     init(
         id: UUID = UUID(),
         papel: Papel = .usuario,
@@ -114,7 +120,9 @@ final class Mensagem {
         raciocinio: String? = nil,
         criadaEm: Date = Date(),
         anexos: [Anexo] = [],
-        conversa: Conversa? = nil
+        conversa: Conversa? = nil,
+        tokensDeEntrada: Int? = nil,
+        tokensDeSaida: Int? = nil
     ) {
         self.id = id
         self.papelCru = papel.rawValue
@@ -123,6 +131,8 @@ final class Mensagem {
         self.criadaEm = criadaEm
         self.anexosCodificados = Anexo.codificar(anexos)
         self.conversa = conversa
+        self.tokensDeEntrada = tokensDeEntrada
+        self.tokensDeSaida = tokensDeSaida
     }
 
     var papel: Papel {

@@ -51,7 +51,7 @@
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>A câmera tira a foto que você anexa à conversa, para o assistente ler o documento, o quadro branco ou o objeto mostrado na imagem.</string>
+	<string>A câmera serve para tirar a foto que você anexa à conversa e para ler o QR de pareamento do computador. A foto vai para o assistente ler o documento, o quadro branco ou o objeto mostrado nela; o QR só é usado para ligar este iPhone ao DSH do computador.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>O microfone capta a sua voz para o modo de voz transcrever a fala enquanto você segura o botão, sem guardar arquivo de áudio no aparelho.</string>
 	<key>NSPhotoLibraryUsageDescription</key>

@@ -109,8 +109,12 @@ struct TelaPrincipal: View {
                         estadoVazio
                     }
                     ForEach(mensagens) { mensagem in
-                        BolhaDeMensagem(mensagem: mensagem)
-                            .id(mensagem.id)
+                        BolhaDeMensagem(
+                            mensagem: mensagem,
+                            podeRepetir: mensagem.id == ultimaRespostaID,
+                            aoRepetir: { modelo.repetirUltimaResposta() }
+                        )
+                        .id(mensagem.id)
                     }
                     if modelo.estaRespondendo {
                         BolhaDeMensagem(
@@ -165,6 +169,13 @@ struct TelaPrincipal: View {
                 .font(Tipografia.corpo())
                 .foregroundStyle(Cores.textoFraco)
                 .fixedSize(horizontal: false, vertical: true)
+            // Uma vez só, onde a conversa começa: repetir embaixo de cada resposta
+            // vira ruído e a pessoa para de ler.
+            Text("A IA pode errar. Confira nomes, números e comandos antes de usar.")
+                .font(Tipografia.legenda())
+                .foregroundStyle(Cores.textoFraco)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, Espaco.xs)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.top, Espaco.xl)
@@ -320,6 +331,12 @@ struct TelaPrincipal: View {
 
     private var mensagens: [Mensagem] {
         (conversaEfetiva?.mensagens ?? []).sorted { $0.criadaEm < $1.criadaEm }
+    }
+
+    /// Só a última resposta ganha "Tentar de novo": refazer uma do meio deixaria
+    /// as seguintes respondendo a uma conversa que não existe mais.
+    private var ultimaRespostaID: UUID? {
+        mensagens.last(where: { $0.papel == .assistente })?.id
     }
 
     private var tituloDaConversa: String {

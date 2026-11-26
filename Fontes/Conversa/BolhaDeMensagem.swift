@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// Um turno do transcrito.
 ///
@@ -7,12 +8,23 @@ import SwiftUI
 /// A resposta do assistente ocupa a largura da página, sem balão, com o
 /// raciocínio retrátil em cima e o texto em markdown embaixo. Sistema vira uma
 /// linha central discreta.
+///
+/// Sob a resposta ficam as duas ações que ela pede: copiar, e refazer quando é a
+/// última. O gasto que a API contou fica na mesma linha, à direita, porque é a
+/// única informação da tela que diz o tamanho do contexto.
 struct BolhaDeMensagem: View {
     var papel: Papel
     var texto: String
     var raciocinio: String?
     var anexos: [Anexo]
     var estaAoVivo: Bool
+    var tokensDeEntrada: Int?
+    var tokensDeSaida: Int?
+
+    /// Só a última resposta pode ser refeita: refazer uma do meio deixaria as
+    /// seguintes falando de uma conversa que não existe mais.
+    var podeRepetir: Bool
+    var aoRepetir: (() -> Void)?
 
     /// O detector de artefato varre a resposta inteira e o `body` de uma resposta
     /// ao vivo é reavaliado a cada fragmento do streaming; o cache dentro da
@@ -21,27 +33,40 @@ struct BolhaDeMensagem: View {
     /// cartão é o único ponto que conhece o artefato.
     @State private var cacheDeArtefatos = CacheDeArtefatos()
     @State private var artefatoAberto: Artefato?
+    @State private var copiado = false
 
     init(
         papel: Papel,
         texto: String,
         raciocinio: String? = nil,
         anexos: [Anexo] = [],
-        estaAoVivo: Bool = false
+        estaAoVivo: Bool = false,
+        tokensDeEntrada: Int? = nil,
+        tokensDeSaida: Int? = nil,
+        podeRepetir: Bool = false,
+        aoRepetir: (() -> Void)? = nil
     ) {
         self.papel = papel
         self.texto = texto
         self.raciocinio = raciocinio
         self.anexos = anexos
         self.estaAoVivo = estaAoVivo
+        self.tokensDeEntrada = tokensDeEntrada
+        self.tokensDeSaida = tokensDeSaida
+        self.podeRepetir = podeRepetir
+        self.aoRepetir = aoRepetir
     }
 
-    init(mensagem: Mensagem) {
+    init(mensagem: Mensagem, podeRepetir: Bool = false, aoRepetir: (() -> Void)? = nil) {
         self.papel = mensagem.papel
         self.texto = mensagem.conteudo
         self.raciocinio = mensagem.raciocinio
         self.anexos = mensagem.anexos
         self.estaAoVivo = false
+        self.tokensDeEntrada = mensagem.tokensDeEntrada
+        self.tokensDeSaida = mensagem.tokensDeSaida
+        self.podeRepetir = podeRepetir
+        self.aoRepetir = aoRepetir
     }
 
     var body: some View {
@@ -118,6 +143,9 @@ struct BolhaDeMensagem: View {
                     }
                 }
             }
+            if !estaAoVivo && !texto.isEmpty {
+                acoesDaResposta
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .sheet(item: $artefatoAberto) { artefato in
@@ -145,6 +173,70 @@ struct BolhaDeMensagem: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("O assistente está escrevendo")
+    }
+
+    /// Copiar e, quando é a última, refazer. O gasto contado pela API fica à
+    /// direita: é a única leitura da tela que diz o tamanho do contexto, e some
+    /// quando a resposta veio pela ponte, que não manda esse número.
+    private var acoesDaResposta: some View {
+        HStack(spacing: Espaco.xs) {
+            botaoDeAcao(
+                icone: copiado ? "checkmark" : "doc.on.doc",
+                rotulo: copiado ? "Resposta copiada" : "Copiar resposta"
+            ) {
+                copiar()
+            }
+            if podeRepetir, let aoRepetir {
+                botaoDeAcao(icone: "arrow.clockwise", rotulo: "Tentar de novo", acao: aoRepetir)
+            }
+            Spacer(minLength: Espaco.s)
+            if let gasto {
+                Text(gasto)
+                    .font(Tipografia.legenda())
+                    .foregroundStyle(Cores.textoFraco)
+                    .monospacedDigit()
+                    .accessibilityLabel("Gasto desta resposta: \(gasto)")
+            }
+        }
+        .frame(height: 44)
+    }
+
+    private var gasto: String? {
+        guard let entrada = tokensDeEntrada, entrada > 0 else { return nil }
+        let partes = ["Contexto \(entrada.formatted())"]
+        if let saida = tokensDeSaida, saida > 0 {
+            partes.append("\(saida.formatted()) de saída")
+        }
+        return partes.joined(separator: " · ")
+    }
+
+    /// Alvo de 44 pontos com o ícone de 15 dentro: o traço fica pequeno como o
+    /// resto do texto da resposta, e o toque continua no tamanho da regra.
+    private func botaoDeAcao(
+        icone: String,
+        rotulo: String,
+        acao: @escaping () -> Void
+    ) -> some View {
+        Button(action: acao) {
+            Image(systemName: icone)
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(Cores.textoFraco)
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(rotulo)
+    }
+
+    /// O "copiado" volta ao ícone de copiar depois de um instante: é o retorno
+    /// de que o toque pegou, sem alerta e sem mudar o layout.
+    private func copiar() {
+        UIPasteboard.general.string = texto
+        copiado = true
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 1_600_000_000)
+            copiado = false
+        }
     }
 
     // MARK: - Sistema

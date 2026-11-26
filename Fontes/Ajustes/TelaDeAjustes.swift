@@ -17,6 +17,7 @@ import UIKit
 struct TelaDeAjustes: View {
     @Environment(\.dismiss) private var fechar
     @ObservedObject private var preferencias = Preferencias.compartilhada
+    @ObservedObject private var instancias = Instancias.compartilhada
 
     // Só o que está sendo digitado fica aqui. O valor já salvo nunca volta para
     // a tela: dela saem os 4 últimos caracteres, o suficiente para reconhecer
@@ -38,6 +39,7 @@ struct TelaDeAjustes: View {
     @State private var diagnosticoDeepSeek: String?
     @State private var pareando = false
     @State private var lendoQR = false
+    @State private var instanciaAEesquecer: InstanciaDoDsh?
 
     /// Nomes das chaves como estão no cofre do DSH na máquina da ponte. A
     /// DeepSeek é a única que existe hoje; as de busca entram aqui porque o
@@ -49,6 +51,7 @@ struct TelaDeAjustes: View {
             Form {
                 secaoDoMotor
                 secaoDaDeepSeek
+                secaoDosComputadores
                 secaoDaPonte
                 secaoDoModelo
                 secaoDaBusca
@@ -82,8 +85,34 @@ struct TelaDeAjustes: View {
                 aoFechar: { lendoQR = false }
             )
         }
+        .confirmationDialog(
+            "Esquecer \(instanciaAEesquecer?.rotulo ?? "este computador")?",
+            isPresented: Binding(
+                get: { instanciaAEesquecer != nil },
+                set: { if !$0 { instanciaAEesquecer = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Esquecer", role: .destructive) {
+                guard let instancia = instanciaAEesquecer else { return }
+                instanciaAEesquecer = nil
+                instancias.remover(instancia.id)
+                finalDoToken = finalDe(ChaveDoCofre.tokenDaPonte)
+                resultadoDoTeste = nil
+                avisoDaPonte = "Esqueci \(instancia.rotulo). O endereço e o token dele saíram deste iPhone."
+            }
+            Button("Cancelar", role: .cancel) {
+                instanciaAEesquecer = nil
+            }
+        } message: {
+            Text("O endereço sai da lista e o token sai do cofre. Para voltar, é preciso parear de novo.")
+        }
         .task {
             await lerCofre()
+            instancias.sincronizarComPreferencias(
+                endereco: preferencias.enderecoDaPonte,
+                temToken: finalDoToken != nil
+            )
             await aplicarPareamento()
         }
     }
@@ -247,10 +276,25 @@ struct TelaDeAjustes: View {
         }
     }
 
-    // MARK: - 3. Ponte do DSH
+    // MARK: - 3. Computadores
 
-    private var secaoDaPonte: some View {
+    /// A lista de computadores conhecidos, com o que está em uso marcado.
+    ///
+    /// Parear não sobrescreve mais nada: cada leitura de QR acrescenta um
+    /// computador (ou atualiza o que já tinha o mesmo endereço) e o token de
+    /// cada um fica numa conta própria do cofre. Tocar numa linha troca o
+    /// computador em uso e testa a conexão na hora, para a troca não ser uma
+    /// promessa silenciosa.
+    private var secaoDosComputadores: some View {
         Section {
+            if instancias.lista.isEmpty {
+                textoDeApoio("Nenhum computador salvo ainda. Ler o QR do computador é o caminho mais curto.")
+            } else {
+                ForEach(instancias.lista) { instancia in
+                    linhaDoComputador(instancia)
+                }
+            }
+
             Button {
                 lendoQR = true
             } label: {
@@ -259,10 +303,10 @@ struct TelaDeAjustes: View {
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(Cores.acento)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Ler QR do computador")
+                        Text(pareando ? "Pareando..." : "Adicionar pela câmera")
                             .font(Tipografia.corpo())
                             .foregroundStyle(Cores.texto)
-                        Text("Põe o endereço da ponte e troca o código pelo token.")
+                        Text("Lê o QR de pareamento e põe o computador em uso.")
                             .font(Tipografia.legenda())
                             .foregroundStyle(Cores.textoFraco)
                             .fixedSize(horizontal: false, vertical: true)
@@ -275,10 +319,72 @@ struct TelaDeAjustes: View {
             .buttonStyle(.plain)
             .disabled(pareando)
             .listRowBackground(Cores.superficie)
-            .accessibilityLabel("Ler o QR de pareamento do computador")
+            .accessibilityLabel("Adicionar computador pela câmera")
             .accessibilityHint("Abre a câmera para ler o QR que o DSH do computador mostra em Ajustes.")
+        } header: {
+            cabecalho("Computadores")
+        }
+    }
 
-            textoDeApoio("O outro caminho é digitar: o endereço é o do tailnet que publica a ponte, no formato https://maquina.tailnet.ts.net:8443, e o token é o do ponte.json da máquina que roda a ponte.")
+    @ViewBuilder
+    private func linhaDoComputador(_ instancia: InstanciaDoDsh) -> some View {
+        let ativo = instancias.ativa == instancia.id
+        let temToken = instancias.token(de: instancia.id) != nil
+
+        Button {
+            guard !ativo else { return }
+            instancias.ativar(instancia.id)
+            finalDoToken = finalDe(ChaveDoCofre.tokenDaPonte)
+            resultadoDoTeste = nil
+            avisoDaPonte = "Agora o app fala com \(instancia.rotulo)."
+            Task { await testarPonte() }
+        } label: {
+            HStack(alignment: .top, spacing: Espaco.s) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(instancia.rotulo)
+                        .font(Tipografia.corpo())
+                        .foregroundStyle(Cores.texto)
+                    Text(instancia.endereco)
+                        .font(Tipografia.legenda())
+                        .foregroundStyle(Cores.textoFraco)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    if !temToken {
+                        Text("Sem token: pareie de novo para usar este computador.")
+                            .font(Tipografia.legenda())
+                            .foregroundStyle(Cores.perigo)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                Spacer(minLength: 0)
+                if ativo {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(Cores.acento)
+                        .accessibilityHidden(true)
+                }
+            }
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .listRowBackground(Cores.superficie)
+        .accessibilityLabel("\(instancia.rotulo), \(instancia.endereco)\(ativo ? ", em uso" : "")")
+        .accessibilityHint(ativo ? "Já é o computador em uso." : "Põe este computador em uso.")
+        .swipeActions(edge: .trailing) {
+            Button(role: .destructive) {
+                instanciaAEesquecer = instancia
+            } label: {
+                Text("Esquecer")
+            }
+        }
+    }
+
+    // MARK: - 4. Ponte do DSH
+
+    private var secaoDaPonte: some View {
+        Section {
+            textoDeApoio("O endereço é o do tailnet que publica a ponte, no formato https://maquina.tailnet.ts.net:8443, e o token é o do ponte.json da máquina que roda a ponte.")
 
             TextField("https://maquina.tailnet.ts.net:8443", text: $preferencias.enderecoDaPonte)
                 .font(Tipografia.codigo(13))
@@ -379,7 +485,7 @@ struct TelaDeAjustes: View {
         }
     }
 
-    // MARK: - 4. Modelo
+    // MARK: - 5. Modelo
 
     private var secaoDoModelo: some View {
         Section {
@@ -432,7 +538,7 @@ struct TelaDeAjustes: View {
         }
     }
 
-    // MARK: - 5. Busca web
+    // MARK: - 6. Busca web
 
     private var secaoDaBusca: some View {
         Section {
@@ -471,7 +577,7 @@ struct TelaDeAjustes: View {
         }
     }
 
-    // MARK: - 6. Voz
+    // MARK: - 7. Voz
 
     private var secaoDaVoz: some View {
         Section {
@@ -491,7 +597,7 @@ struct TelaDeAjustes: View {
         }
     }
 
-    // MARK: - 7. Sobre
+    // MARK: - 8. Sobre
 
     private var secaoSobre: some View {
         Section {
@@ -570,6 +676,7 @@ struct TelaDeAjustes: View {
         }
         do {
             try CofreDeChaves.guardar(limpo, para: ChaveDoCofre.tokenDaPonte)
+            instancias.tokenDaAtivaMudou(limpo)
             tokenDaPonte = ""
             finalDoToken = String(limpo.suffix(4))
             avisoDaPonte = "Token da ponte salvo no cofre deste iPhone."
@@ -582,6 +689,7 @@ struct TelaDeAjustes: View {
     private func apagarTokenDaPonte() {
         do {
             try CofreDeChaves.apagar(ChaveDoCofre.tokenDaPonte)
+            instancias.tokenDaAtivaMudou(nil)
             finalDoToken = nil
             resultadoDoTeste = nil
             avisoDaPonte = "Token da ponte apagado do cofre."
@@ -658,7 +766,6 @@ struct TelaDeAjustes: View {
         guard let pedido = PendenciaDePareamento.atual else { return }
         PendenciaDePareamento.atual = nil
 
-        preferencias.enderecoDaPonte = pedido.endereco
         pareando = true
         avisoDaPonte = nil
         resultadoDoTeste = nil
@@ -669,7 +776,16 @@ struct TelaDeAjustes: View {
             try CofreDeChaves.guardar(trocado.token, para: ChaveDoCofre.tokenDaPonte)
             finalDoToken = String(trocado.token.suffix(4))
             preferencias.usaPonte = true
-            avisoDaPonte = "Pareado com \(trocado.rotulo ?? "a ponte"): token salvo no cofre e motor da ponte ligado."
+            // O computador entra na lista com o nome que ele mesmo informou: a
+            // ponte devolve o rótulo e o nome da máquina, e é isso que a lista
+            // mostra em vez de um endereço cru.
+            let nome = trocado.maquina ?? trocado.rotulo
+            let instancia = try instancias.registrarPareamento(
+                endereco: pedido.endereco,
+                nome: nome,
+                token: trocado.token
+            )
+            avisoDaPonte = "Pareado com \(instancia.rotulo): token salvo no cofre e motor da ponte ligado."
             await testarPonte()
         } catch {
             avisoDaPonte = "Não consegui trocar o código do QR: \(error.localizedDescription)"

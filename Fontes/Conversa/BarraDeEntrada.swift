@@ -111,17 +111,26 @@ struct BarraDeEntrada: View {
 
     // MARK: - Seletor de modelo
 
+    /// O menu diz em uma linha o que cada motor faz de diferente. Duas linhas por
+    /// item não sobrevivem ao menu do iOS, que achata o rótulo; a diferença que
+    /// importa cabe numa frase curta.
     private var seletorDeModelo: some View {
         Menu {
             Button {
                 aoEscolherModelo("deepseek-chat")
             } label: {
-                itemDeMenu("DeepSeek chat", marcado: sessaoAtual == nil && modeloAtual == "deepseek-chat")
+                itemDeMenu(
+                    "Chat, resposta rápida",
+                    marcado: sessaoAtual == nil && modeloAtual == "deepseek-chat"
+                )
             }
             Button {
                 aoEscolherModelo("deepseek-reasoner")
             } label: {
-                itemDeMenu("DeepSeek raciocínio", marcado: sessaoAtual == nil && modeloAtual == "deepseek-reasoner")
+                itemDeMenu(
+                    "Raciocínio, pensa antes",
+                    marcado: sessaoAtual == nil && modeloAtual == "deepseek-reasoner"
+                )
             }
             Divider()
             Button(action: { aoEscolherSessao() }) {

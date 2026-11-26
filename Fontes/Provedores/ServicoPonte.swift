@@ -214,7 +214,7 @@ final class ServicoPonte: ProvedorDeConversa {
     static func trocarCodigo(
         _ codigo: String,
         endereco: String
-    ) async throws -> (token: String, rotulo: String?) {
+    ) async throws -> (token: String, rotulo: String?, maquina: String?) {
         var base = endereco.trimmingCharacters(in: .whitespacesAndNewlines)
         while base.hasSuffix("/") {
             base.removeLast()
@@ -238,7 +238,7 @@ final class ServicoPonte: ProvedorDeConversa {
             let texto = String(data: dados, encoding: .utf8) ?? ""
             throw ErroDaConversa.http(codigoHTTP, String(texto.prefix(200)))
         }
-        return (token, objeto?["rotulo"] as? String)
+        return (token, objeto?["rotulo"] as? String, objeto?["maquina"] as? String)
     }
 
     func eventos() -> AsyncThrowingStream<EventoDaPonte, Error> {
