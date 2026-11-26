@@ -62,13 +62,34 @@ referência de forma: cartão de entrada flutuante, folha modal para lista longa
 linha de lista com ação secundária em menu, estado vazio curto. Nada foi copiado:
 o projeto não aceita biblioteca de terceiro, e o contrato fixa os tipos.
 
-Na revisão de 26/11/2026 o catálogo foi consultado de novo, atrás de leitor de QR.
-As consultas gastaram o mesmo teto de 6 e voltaram só geradores de QR para React,
-React Native e Svelte (`panel-ui/qr-code`, `spell-ui/qr-code`, `chakra-ui/qr-code`,
-`ark-ui/qr-code`, `untitled-ui/qr-code`): nenhum lê câmera, nenhum é SwiftUI. O que
-foi aproveitado é a forma, que a própria Apple já fixa: moldura de mira, fundo
-preto, um alvo de 44 pt para fechar e a mensagem de erro logo abaixo da moldura.
-Nada foi instalado, e a folha de leitura é `AVCaptureMetadataOutput` puro.
+Na revisão de 26/11/2026 o catálogo foi consultado de novo (3 consultas de 6), atrás do
+que um app de conversa com IA faz na tela, com ChatGPT, Claude, Gemini e o próprio
+DeepSeek como referência. O que voltou: `spaceui/ai-chat-workspace` (MIT), com
+compositor que tem seletor de modelo e de ferramenta dentro dele, ações por mensagem
+(copiar, avaliar), barra lateral com busca de conversa e o raciocínio com contador ao
+vivo; `spectrum-ui/reasoning-trace` e `notra/chatgpt-reasoning`, o mesmo padrão de
+"trabalhou por N s" recolhível; `reui/c-input-group-19` e `reui/c-input-group-18`, o
+compositor com anexo e barra de ações. Todos são React e nenhum é SwiftUI, então nada
+foi instalado: o que se aproveitou é a forma, que já é a mesma dos quatro apps citados.
+O que ficou de fora, e por quê, está na lista abaixo, em "o que o app não tem".
+
+## O que os quatro apps de IA têm e o app ainda não
+
+Comparação com ChatGPT, Claude, Gemini e DeepSeek, e com o que o catálogo mostra do
+mesmo padrão. A coluna "hoje" é o código deste repositório, não impressão.
+
+| padrão | os quatro apps | hoje | prova |
+|---|---|---|---|
+| copiar a resposta | botão sob cada resposta | só o bloco de código tem copiar; a resposta inteira não | `UIPasteboard` aparece em `BlocoDeCodigo.swift:154` e em nenhum outro ponto de conversa |
+| tentar de novo | sob a última resposta, refaz sem redigitar | não existe: a saída é reenviar a pergunta | `BolhaDeMensagem` não tem ação na resposta |
+| seletor de modelo com uma linha | nome mais o que ele faz ("raciocina antes, mais lento") | só o nome e o check | o menu é montado com `rotuloDoModelo` |
+| medidor de contexto | tokens usados e o teto do modelo | a API manda `usage` e o app joga fora | `ServicoDeepSeek.swift:165` emite `.uso` e `ConversaViewModel.swift:162` descarta |
+| conversa é a sessão | lista com busca e fixar | tem, e o build 5 passou a guardar a sessão | `MenuLateral`, `TelaSessoesDsh` |
+| raciocínio recolhível com tempo | "Pensou por Ns" | tem | `PensamentoRetratil` |
+| estado vazio com uma ação | uma frase e o campo | tem | `DadosDeDemonstracao` e a primeira tela |
+
+Ou seja: a parte de conversa já está no nível dos quatro, e o que falta é a camada de
+ação em cima da resposta e o dado de uso que o app já recebe.
 
 ## A revisão de limpeza de 26/11/2026, na tela de Ajustes
 
