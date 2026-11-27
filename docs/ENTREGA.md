@@ -815,6 +815,61 @@ O que esta rodada **não** prova: nada foi instalado no aparelho ainda. A prova 
 dois jobs, do conteúdo do pacote e da resposta da ponte medida daqui com a mesma sessão nova que o
 app passa a criar.
 
+### A décima segunda instalação, no SUPERCOLLIDER, em 26/11/2026
+
+Esta rodada fecha o mesmo defeito da instalação anterior, agora com a causa medida no log em vez de
+suposta. Às 22:19 de 26/11/2026, no build 8, com a ponte escolhida e uma sessão já adotada, a tela
+repetiu "Não deu para responder. Falha de rede: a sessão do DSH fechou os eventos sem devolver texto".
+
+O log da ponte trouxe a linha do caso:
+
+```
+2026-11-27T01:19:40Z eventos -> session-94f30e75...: 105 quadros, 250 chars de texto, 716 de raciocinio, fechou por fim do turno (end)
+```
+
+Os 250 caracteres eram a resposta do turno **anterior**, não da pergunta feita às 22:19. A causa: o
+`session/follow` do DSH entrega primeiro um retrato da sessão inteira e, logo depois, os quadros do
+último turno já fechado. A ponte repassava tudo, o `turn/end` daquele turno antigo fechava o stream e
+o iPhone ficava com texto de outra hora ou com nada. Sessão ocupada no computador piora o quadro,
+porque a resposta do turno que está rodando chega antes da resposta da fila.
+
+| o que mudou | onde | por quê |
+|---|---|---|
+| fronteira pelo pedido desta ponte | `ponte/servidor.mjs`, rota `/eventos` | o `requestId` devolvido pelo `POST /mensagem` aparece no evento do pedido (`user/message` ou `agent/inbox/spliced`); o que vem antes disso é conversa que já estava na sessão |
+| turno travado por número | mesma rota | depois da fronteira, só o primeiro começo de turno acima de todo turno já aberto é o turno do pedido; sessão ocupada fecha o turno de lá e só então abre o da fila |
+| fim de turno sem texto com causa | mesma rota | turno encerrado por motivo do DSH (por exemplo `blocked`) agora manda `event: erro` com o motivo, em vez de sumir calado |
+| ponte que não cai | topo de `servidor.mjs` | `uncaughtException` e `unhandledRejection` são registrados no log e o processo segue; antes um cliente que abandonava o stream derrubava a ponte inteira (`ECONNRESET` no aparelho) |
+| sessão ocupada não recebe a pergunta | `Fontes/Conversa/ConversaViewModel.swift`, `executarEnvio` e `sessaoOcupada` | se a sessão escolhida está respondendo no computador (`rodando` na lista), o app abre uma sessão só do iPhone em vez de entrar na fila |
+| versão | `project.yml` | `CURRENT_PROJECT_VERSION` de 8 para 9 |
+
+| o que | como foi medido | resultado |
+|---|---|---|
+| sessão nova | `node _tmp\teste-eventos.mjs`, mensagem e leitura de `/eventos` | texto `alfa` em 1.450 ms |
+| sessão com história | mesmo script com um id que já tinha turno fechado | texto `beta` em 1.371 ms, sem repetir a resposta antiga |
+| sessão ocupada | `node _tmp\teste-fila.mjs`, pergunta longa e outra por cima 1,5 s depois | só `gama`, a resposta do segundo pedido, em 14.973 ms, depois do turno de lá terminar |
+| caminho do iPhone | mesmo teste com o endereço do tailnet | texto `alfa` em 1.999 ms |
+| cliente que abandona o stream | `node _tmp\teste-abandono.mjs`, duas vezes | `/v1/saude` respondeu 200 nas duas, a ponte continuou de pé e registrou `fechou por fim do stream` |
+| turno bloqueado | leitura crua de uma sessão que o DSH encerrou com `blocked` | a ponte passou a fechar com motivo em vez de deixar a tela pendurada |
+
+#### A conta do que mudou
+
+| o que | como foi medido | resultado |
+|---|---|---|
+| rodada do CI | `gh run view 45924613321`, commit `7c3ac46` | `success` nos dois jobs, "Simulador e capturas" em 7m48s e "IPA sem assinatura" em 3m02s |
+| pacote entregue | artefato `ipa` da rodada, conferido com `zipfile` e `plistlib` | `DSH-livre.ipa` com 932.449 bytes e sha256 `5EEA7C014B5B842AAD560B3471445A91FF625DD80B83631284312BEB35E4FC8C` |
+| conteúdo do pacote | mesmo conferidor | 15 entradas, nenhuma com `PlugIns`, `dev.ramses.dsh`, versão `1.0.0` build `9`, mínimo 18.0 |
+| binário | `file_size` de `Payload/DSH.app/DSH` no `zipfile` | 3.798.496 bytes, 1.952 a mais que os 3.796.544 do build 8, que é o código novo |
+| onde o arquivo está | `C:\Users\victo\iCloudDrive\DSH-livre-20261126-build9.ipa` e `_tmp\share\DSH-livre-20261126-build9.ipa` | mesmo sha256 nos dois |
+
+Depois de instalar, Ajustes tem de mostrar "1.0.0 (9)" no rodapé. Com o motor na ponte, a pergunta
+responde mesmo quando a sessão escolhida está respondendo no computador, porque o app abre uma sessão
+só dele; com o motor no DeepSeek direto, a resposta vem pelo stream descomprimido do build 7.
+
+O que esta rodada **não** prova: nada foi instalado no aparelho ainda. A prova é de compilação nos
+dois jobs, do conteúdo do pacote e dos quatro caminhos da ponte medidos daqui com o mesmo código que
+o build 9 carrega. A regra da sessão ocupada foi exercitada pela ponte e pela compilação, não pelo
+toque na tela do iPhone.
+
 ## 11. O que fica aberto
 
 O que está abaixo é conhecido e não escondido. Nenhum item impede usar o app no dia a dia, mas
@@ -833,7 +888,7 @@ cada um é uma promessa que o app ainda não cumpre.
 | pareamento por QR exercitado no aparelho | o caminho está provado no servidor (`POST /v1/pareamento` e `/v1/pareamento/trocar`, com código de uso único) e o build 5 traz o leitor dentro de Ajustes, com `AVCaptureMetadataOutput` e o mesmo `PedidoDePareamento` do link `dsh://` | falta ler um QR de verdade com a câmera do iPhone e ver o token cair no cofre; é o teste seguinte. O simulador do CI não tem QR nem câmera com imagem, então ele não fecha essa prova |
 | texto do pedido de câmera | resolvido no build 6: `NSCameraUsageDescription` cita a foto anexada e o QR de pareamento, e o pacote traz a frase nova em `Info.plist` | o alerta do sistema agora descreve as duas ações que usam a câmera |
 | resposta vazia do motor DeepSeek direto | tratado no build 7: o stream passou a ser lido pela delegação do `URLSession`, que descomprime, e o erro diz quantas linhas chegaram junto do `Content-Encoding` | falta confirmar no aparelho que a conversa responde; se não responder, a faixa do erro passa a nomear a causa |
-| pergunta caindo em sessão ocupada | tratado no build 8: o app cria a sessão do iPhone no primeiro envio e o erro do stream vazio ensina a criar uma sessão nova | falta confirmar no aparelho que a sessão criada pela ponte aparece na lista do computador e responde na tela do iPhone, com título legível |
+| pergunta caindo em sessão ocupada | tratado no build 9: a ponte só entrega o turno do próprio pedido (fronteira pelo `requestId`) e o app abre sessão nova quando a escolhida está `rodando` no computador | falta confirmar no aparelho: mandar duas mensagens seguidas, com uma sessão do PC respondendo, e ver a resposta certa na tela do iPhone |
 | troca entre dois computadores | a lista, o token por instância e o espelho para as preferências existem e a seção Computadores abre no simulador com um computador salvo | falta ter dois computadores com ponte de pé e alternar entre eles para ver a sessão de cada um carregar no aparelho; o simulador do CI não tem tailnet |
 | foto pela ponte | o motor DeepSeek direto recebe a foto de verdade, em base64; a ponte recebe só o texto reconhecido, e o pedido diz isso ao modelo | a ponte é transporte de texto e não tem rota de imagem; fazer a foto atravessar exigiria uma rota nova nela e um servidor que aceitasse o JPEG |
 | importar a chave de busca web | o cofre do PC não tem `TAVILY_API_KEY` nem `BRAVE_API_KEY` | criar uma chave gratuita na Tavily, gravar no cofre do PC e usar o botão de importar, ou colar direto em Ajustes |
