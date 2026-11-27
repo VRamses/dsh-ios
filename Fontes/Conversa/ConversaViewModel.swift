@@ -171,6 +171,12 @@ final class ConversaViewModel: ObservableObject {
         // numa conversa só dela, que responde.
         if usaPonte && sessaoDaPonte == nil, let nova = await criarSessaoNoDsh() {
             definirSessao(nova.id)
+        } else if usaPonte, let escolhida = sessaoDaPonte, await sessaoOcupada(escolhida),
+                  let nova = await criarSessaoNoDsh() {
+            // A sessão escolhida está respondendo no computador. A pergunta entraria
+            // na fila e só voltaria depois do turno de lá, que pode durar minutos.
+            // Sessão nova responde agora, e a do computador segue em paz.
+            definirSessao(nova.id)
         }
 
         guard let provedor = montarProvedor() else {
@@ -342,6 +348,16 @@ final class ConversaViewModel: ObservableObject {
     }
 
     // MARK: - Sessões da ponte
+
+    /// A sessão está respondendo no computador neste instante? A lista da ponte
+    /// traz esse estado por sessão (`rodando`). Se a ponte não responder, devolve
+    /// `false` e o envio segue com a sessão escolhida.
+    @MainActor
+    private func sessaoOcupada(_ identificador: String) async -> Bool {
+        guard let ponte else { return false }
+        guard let lista = try? await ponte.listarSessoes() else { return false }
+        return lista.first { $0.id == identificador }?.rodando == true
+    }
 
     /// Cria uma sessão nova no DSH pela ponte e devolve o resumo dela, pronto
     /// para abrir. Antes disto o app só listava sessões: quem não tinha nenhuma
