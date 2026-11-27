@@ -836,7 +836,9 @@ porque a resposta do turno que está rodando chega antes da resposta da fila.
 | o que mudou | onde | por quê |
 |---|---|---|
 | fronteira pelo pedido desta ponte | `ponte/servidor.mjs`, rota `/eventos` | o `requestId` devolvido pelo `POST /mensagem` aparece no evento do pedido (`user/message` ou `agent/inbox/spliced`); o que vem antes disso é conversa que já estava na sessão |
-| turno travado por número | mesma rota | depois da fronteira, só o primeiro começo de turno acima de todo turno já aberto é o turno do pedido; sessão ocupada fecha o turno de lá e só então abre o da fila |
+| piso do turno | mesma rota | o turno do pedido é o primeiro começo de turno no piso ou acima dele, e o piso começa em `sessionStats.turns + 1` e sobe a cada turno de outra pessoa que aparecer, venha ele antes ou depois da fronteira |
+| só o fim do turno do pedido fecha | mesma rota | `turn/end` de outro turno é ignorado; antes o fim de um turno alheio encerrava o stream do iPhone |
+| raciocínio não é resposta | mesma rota | `assistant/message` e `turn/end` só fecham com texto; antes 786 caracteres de raciocínio e nenhum de fala fechavam o stream com a tela vazia |
 | fim de turno sem texto com causa | mesma rota | turno encerrado por motivo do DSH (por exemplo `blocked`) agora manda `event: erro` com o motivo, em vez de sumir calado |
 | ponte que não cai | topo de `servidor.mjs` | `uncaughtException` e `unhandledRejection` são registrados no log e o processo segue; antes um cliente que abandonava o stream derrubava a ponte inteira (`ECONNRESET` no aparelho) |
 | sessão ocupada não recebe a pergunta | `Fontes/Conversa/ConversaViewModel.swift`, `executarEnvio` e `sessaoOcupada` | se a sessão escolhida está respondendo no computador (`rodando` na lista), o app abre uma sessão só do iPhone em vez de entrar na fila |
@@ -844,12 +846,28 @@ porque a resposta do turno que está rodando chega antes da resposta da fila.
 
 | o que | como foi medido | resultado |
 |---|---|---|
-| sessão nova | `node _tmp\teste-eventos.mjs`, mensagem e leitura de `/eventos` | texto `alfa` em 1.450 ms |
-| sessão com história | mesmo script com um id que já tinha turno fechado | texto `beta` em 1.371 ms, sem repetir a resposta antiga |
-| sessão ocupada | `node _tmp\teste-fila.mjs`, pergunta longa e outra por cima 1,5 s depois | só `gama`, a resposta do segundo pedido, em 14.973 ms, depois do turno de lá terminar |
-| caminho do iPhone | mesmo teste com o endereço do tailnet | texto `alfa` em 1.999 ms |
+| sessão nova | `node _tmp\teste-eventos.mjs`, mensagem e leitura de `/eventos` | texto `alfa` em 1.450 ms e em 2.846 ms nas duas rodadas |
+| sessão com história | mesmo script com um id que já tinha turno fechado | texto `beta` em 1.371 ms e em 1.657 ms, sem repetir a resposta antiga |
+| sessão ocupada | `node _tmp\teste-fila.mjs`, pergunta longa e outra por cima 1,5 s depois | só `gama`, a resposta do segundo pedido, em 20.108 ms e em 13.597 ms, depois do turno de lá terminar |
+| caminho do iPhone | mesmo teste com o endereço do tailnet | texto `alfa` em 1.866 ms |
 | cliente que abandona o stream | `node _tmp\teste-abandono.mjs`, duas vezes | `/v1/saude` respondeu 200 nas duas, a ponte continuou de pé e registrou `fechou por fim do stream` |
+| ordem crua dos quadros | `node _tmp\ordem-crua.mjs` com `?cru=1` | 24 quadros: `snapshot`, `step/start`, cinco `user/message`, `assistant-stream start turno=1`, `text-delta`, `block-end`, `assistant/message`, `end`, `step/end`, `turn/end` |
 | turno bloqueado | leitura crua de uma sessão que o DSH encerrou com `blocked` | a ponte passou a fechar com motivo em vez de deixar a tela pendurada |
+
+#### O teste do iPhone às 23:04, que achou o resto
+
+O build 8 já instalado mandou `[ponte SUPERCOLLIDER] Teste` para a sessão desta conversa, que estava
+respondendo na hora. O log da ponte mostrou o buraco que ainda sobrava:
+
+```
+2026-11-27T02:04:09Z eventos -> session-94f30e75...: 87 quadros, 0 chars de texto, 786 de raciocinio, fechou por fim do turno (end)
+```
+
+O `end` do stream de uma etapa não carrega número de turno, então ele fechava o stream do iPhone
+achando que o turno tinha acabado, com o raciocínio do turno do computador e nenhuma fala. Foi o que
+produziu as três mudanças de cima: `end` de etapa não fecha mais nada, `turn/end` só fecha o turno do
+pedido, e o piso do turno não depende mais da ordem em que os quadros chegam. Como isso mora só na
+ponte, vale para o build 8 e para o build 9 sem reinstalar nada.
 
 #### A conta do que mudou
 
