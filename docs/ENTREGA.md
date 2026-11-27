@@ -1042,6 +1042,54 @@ O que esta rodada **não** prova: a leitura dos quadros no aparelho continua sem
 está certo e o corpo foi conferido aqui, mas o app só é observável pelo que ele conta para a ponte, e
 essa contagem estreia neste build.
 
+### O build 12, deixado no iCloud Drive em 27/11/2026
+
+Pedido do Ramses, com estas palavras: "Quando eu escolher uma sessão existente, queria ver o
+histórico dela. É possível?" Antes deste build, escolher uma sessão abria a conversa ligada a ela, e
+essa conversa só tinha o que tinha sido dito pelo iPhone: a tela ficava em branco com o nome da sessão
+no topo, mesmo que a sessão tivesse horas de conversa no computador.
+
+Agora, ao escolher a sessão, a tela mostra o que já foi conversado nela. A conversa que espelha a
+sessão é ligada a ela uma vez e reaproveitada nas próximas aberturas; o histórico entra por cima, de
+trás para frente, e termina com o botão "Ver mensagens mais antigas" enquanto a sessão tiver o que
+trazer. O que já está na tela não é trazido de novo, então abrir a mesma sessão duas vezes não duplica
+bolha.
+
+| o que mudou | onde | por quê |
+|---|---|---|
+| histórico da sessão escolhida | `Fontes/Conversa/ConversaViewModel.swift`, `conversaParaSessao`, `trazerHistorico`, `carregarMaisAntigas`, `importar` | junta as bolhas do histórico antes de mostrar a tela, e pagina para trás até juntar 20 bolhas, no máximo 4 páginas de 60 mensagens |
+| vínculo entre sessão e conversa | `Fontes/Nucleo/VinculoDeSessoes.swift`, novo | `UserDefaults`, com o menor `seq` já trazido; nada no banco local muda de formato, porque o `ModelContainer` é criado com `try?` e uma migração que falhasse deixaria o app na tela de "Não foi possível abrir o banco local do DSH" |
+| leitura da página do histórico | `Fontes/Provedores/ServicoPonte.swift`, `pagina` e `Registro.iniciar` | o RPC responde o resultado dentro de `pagina`, com os eventos em `records` e cada evento embrulhado em `event`; o leitor antigo procurava `registros` na raiz e devolvia lista vazia |
+| o que é conversa | mesmo arquivo mais `ponte/servidor.mjs`, `?so=mensagens` e `enxugarRegistro` | chamada e resultado de ferramenta, passo, job e cabeçalho de pedido não são conversa, e `usage` e `stream` repetem o texto: a ponte corta isso antes de responder, e a tela filtra de novo, para ponte antiga continuar funcionando |
+| o que não é pergunta | `ConversaViewModel.mensagem(de:)` e os marcadores de sistema | o DSH injeta mensagem de usuário no meio do turno (`system-reminder`, contexto de execução, catálogo de skills, checkpoint de compactação); sem o filtro, isso entrava como pergunta de 12.500 caracteres |
+| etiqueta da ponte | `ConversaViewModel.limpar` | o texto que sai do iPhone volta com `[ponte SUPERCOLLIDER]` na frente; a etiqueta sai antes de virar bolha, e é isso também que faz a mensagem já gravada não duplicar |
+| cartão de raciocínio | `Fontes/Conversa/PensamentoRetratil.swift` | o cartão nasce fechado e só abre enquanto a máquina pensa; aberto por padrão, ele ocupava a tela com o rascunho de uma resposta pronta vinda do histórico |
+| tela | `Fontes/Conversa/TelaPrincipal.swift`, `abrirSessao`, `botaoDoHistorico` e `apagar` | a conversa da sessão troca na hora e o histórico entra em seguida; a faixa "Trazendo o histórico desta sessão do computador" aparece durante a busca; apagar a conversa esquece o vínculo |
+| versão | `project.yml` | `CURRENT_PROJECT_VERSION` de 11 para 12 |
+
+| o que | como foi medido | resultado |
+|---|---|---|
+| formato do evento de mensagem | `node _tmp\conferir-papel.mjs`, evento `seq 10409` da sessão desta conversa, cru e enxuto | no cru a mensagem do usuário vem chapada em `data.content`, com `role` em `data.role`; a do assistente vem dentro de `data.message`. O formato enxuto normaliza as duas em `data.message` com `role` preenchido e `content` só de `text` e `reasoning` |
+| defeito achado nessa conferência | mesma execução, antes da correção | `enxugarRegistro` lia só `data.message`, então toda mensagem de usuário virava bolha vazia e sumia: a amostra dava `usuario 0` nas seis sessões. Depois da correção, as mesmas seis sessões dão de 1 a 14 bolhas de usuário |
+| peso da página | `node _tmp\conferir-enxuto.mjs`, mesma sessão, `maxMessages=50` | 1.472 KB e 271 registros no formato cru, contra 76 KB e 51 registros em `?so=mensagens`, 19 vezes menos |
+| o que sai de uma sessão de agente | `node _tmp\medir-pagina.mjs`, `maxMessages=80` | 438 registros: 72 `assistant/message` com 605 KB, 70 `tool/result` com 285 KB, 2 `request/header` com 97 KB. Só 82 eram mensagem, e a maior parte do peso é do motor |
+| bolhas por sessão | `node _tmp\amostra-historico.mjs`, quatro páginas de 60 em seis sessões | 16 bolhas em "DSH para iPhone", 7 em "Sideloadly não reconhece iPhone conectado", 21 em "Confi", 30 em "[ponte SUPERCOLLIDER] # Briefing de", 8 em "Refazer Rebobina para Desktop em Rust", 4 em "Painel Pessoal" |
+| rodada do CI | `gh run view 45936940037`, commit `110ab52` | `success` nos dois jobs, "IPA sem assinatura" em 3m02s e "Simulador e capturas" em cerca de 8m |
+| pacote entregue | artefato `ipa` da rodada, conferido com `_tmp\conferir-ipa.py` | `DSH-livre.ipa` com 970.924 bytes e sha256 `D5BE1C36B7576941FEDC789A41E4965C85C744660747D150F2A189D6E1D8EF2D` |
+| conteúdo do pacote | mesmo conferidor, com `zipfile` e `plistlib` | 15 entradas, nenhuma com `PlugIns`, versão `1.0.0` build `12`, mínimo 18.0 |
+| binário | `file_size` de `Payload/DSH.app/DSH` no `zipfile` | 3.932.448 bytes, 130.864 a mais que os 3.801.584 do build 11 |
+| onde o arquivo está | `C:\Users\victo\iCloudDrive\DSH-livre-20261127-build12.ipa` e `_tmp\share\DSH-livre-20261127-build12.ipa` | mesmo sha256 nos dois |
+
+Depois de instalar, Ajustes tem de mostrar "1.0.0 (12)" no rodapé. O caminho para ver o histórico:
+abrir o menu, "Sessões do DSH", tocar numa sessão com conversa no computador. A tela mostra a faixa
+"Trazendo o histórico desta sessão do computador" e depois as bolhas, da mais antiga para a mais nova,
+com o botão "Ver mensagens mais antigas" no topo do transcrito enquanto houver o que trazer.
+
+O que esta rodada **não** prova: nada foi instalado no aparelho ainda. O histórico foi exercitado
+contra a ponte de verdade, com o mesmo formato que o app lê, mas não pelo toque na tela do iPhone, e a
+abertura da mesma sessão duas vezes não foi conferida no aparelho: a deduplicação por conteúdo foi
+medida nos scripts, que seguem a mesma regra do app.
+
 ## 11. O que fica aberto
 
 O que está abaixo é conhecido e não escondido. Nenhum item impede usar o app no dia a dia, mas
@@ -1063,6 +1111,7 @@ cada um é uma promessa que o app ainda não cumpre.
 | pergunta caindo em sessão ocupada | tratado no build 9: a ponte só entrega o turno do próprio pedido (fronteira pelo `requestId`) e o app abre sessão nova quando a escolhida está `rodando` no computador | falta confirmar no aparelho: mandar duas mensagens seguidas, com uma sessão do PC respondendo, e ver a resposta certa na tela do iPhone |
 | texto que some com o stream aberto | tratado no build 10: a ponte reabre o acompanhamento em vez de fechar com zero quadros, manda `event: erro` com o motivo quando não houver texto, e o app busca a última resposta guardada na sessão antes de mostrar erro | o build 10 foi instalado em 27/11/2026 e a resposta apareceu, mas o log mostrou que o texto veio do socorro pelo histórico, não dos quadros: a tela enche de uma vez, sem streaming |
 | texto dos quadros ao vivo no aparelho | o build 11 passou a medir de lá: `POST /v1/diagnostico` grava no log da ponte quantos quadros o app viu, quantos tinham `registros`, o último evento e os 400 primeiros caracteres dele; o socorro pelo histórico também deixou de exigir raciocínio vazio | falta instalar o build 11, mandar uma mensagem e ler a linha `diagnostico do app` no log da ponte; o corpo do quadro foi conferido aqui e está no formato que o app lê, então a causa está na leitura do lado do aparelho |
+| histórico da sessão no aparelho | passou a existir no build 12: escolher uma sessão traz o que já foi conversado nela, de trás para frente, sem duplicar bolha ao abrir de novo | falta instalar, abrir a mesma sessão duas vezes e ver a faixa de carregamento no iPhone; numa sessão de agente o rendimento é baixo por página (a sessão desta conversa, com `seq` 10.912, dá 16 bolhas em quatro páginas de 60 mensagens), e é por isso que o botão de mais antigas existe |
 | troca entre dois computadores | a lista, o token por instância e o espelho para as preferências existem e a seção Computadores abre no simulador com um computador salvo | falta ter dois computadores com ponte de pé e alternar entre eles para ver a sessão de cada um carregar no aparelho; o simulador do CI não tem tailnet |
 | foto pela ponte | o motor DeepSeek direto recebe a foto de verdade, em base64; a ponte recebe só o texto reconhecido, e o pedido diz isso ao modelo | a ponte é transporte de texto e não tem rota de imagem; fazer a foto atravessar exigiria uma rota nova nela e um servidor que aceitasse o JPEG |
 | importar a chave de busca web | o cofre do PC não tem `TAVILY_API_KEY` nem `BRAVE_API_KEY` | criar uma chave gratuita na Tavily, gravar no cofre do PC e usar o botão de importar, ou colar direto em Ajustes |
