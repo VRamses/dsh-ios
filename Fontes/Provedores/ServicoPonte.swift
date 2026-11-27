@@ -318,25 +318,45 @@ final class ServicoPonte: ProvedorDeConversa {
                     var comRegistros = 0
                     var ultimoEvento = "nenhum"
                     var amostra = ""
-                    for try await evento in fluxoDeEventos() {
-                        quadros += 1
-                        ultimoEvento = evento.nome
-                        if !evento.registros.isEmpty { comRegistros += 1 }
-                        amostra = String(evento.json.prefix(400))
-                        if let erro = evento.erro {
-                            throw ErroDaConversa.rede(erro)
-                        }
-                        for registro in evento.registros {
-                            if let raciocinio = registro.raciocinioDoAssistente,
-                               let pedaco = delta(raciocinio, emitido: raciocinioEmitido) {
-                                continuacao.yield(.raciocinio(pedaco))
-                                raciocinioEmitido = raciocinio
+                    // A ponte é reiniciada a toda hora enquanto ela mesma está sendo
+                    // mexida, e cada reinício derruba o stream aberto: o iOS entrega
+                    // isso como `NSURLErrorNetworkConnectionLost` e a tela mostrava
+                    // "A conexão de rede foi perdida" com o turno ainda rodando do
+                    // outro lado. Ruptura transitória não é erro do pedido: religa,
+                    // que o turno continua no computador e o snapshot do novo stream
+                    // é descontado pelo `delta` acima.
+                    var rupturas = 0
+                    while true {
+                        do {
+                            for try await evento in fluxoDeEventos() {
+                                quadros += 1
+                                ultimoEvento = evento.nome
+                                if !evento.registros.isEmpty { comRegistros += 1 }
+                                amostra = String(evento.json.prefix(400))
+                                if let erro = evento.erro {
+                                    throw ErroDaConversa.rede(erro)
+                                }
+                                for registro in evento.registros {
+                                    if let raciocinio = registro.raciocinioDoAssistente,
+                                       let pedaco = delta(raciocinio, emitido: raciocinioEmitido) {
+                                        continuacao.yield(.raciocinio(pedaco))
+                                        raciocinioEmitido = raciocinio
+                                    }
+                                    if let novo = registro.textoDoAssistente,
+                                       let pedaco = delta(novo, emitido: textoEmitido) {
+                                        continuacao.yield(.texto(pedaco))
+                                        textoEmitido = novo
+                                    }
+                                }
                             }
-                            if let novo = registro.textoDoAssistente,
-                               let pedaco = delta(novo, emitido: textoEmitido) {
-                                continuacao.yield(.texto(pedaco))
-                                textoEmitido = novo
+                            break
+                        } catch {
+                            guard ServicoPonte.ehRupturaTransitoria(error), rupturas < 3 else {
+                                throw error
                             }
+                            rupturas += 1
+                            try? await Task.sleep(nanoseconds: 1_500_000_000)
+                            if Task.isCancelled { throw CancellationError() }
                         }
                     }
                     // O stream pode fechar sem nenhum texto (sessao ociosa, evento
@@ -549,6 +569,27 @@ final class ServicoPonte: ProvedorDeConversa {
         if erro is CancellationError { return true }
         if let erroDeURL = erro as? URLError, erroDeURL.code == .cancelled { return true }
         return false
+    }
+
+    /// Ruptura que não diz nada sobre o pedido: a ponte reiniciou (acontece a cada
+    /// ajuste no `servidor.mjs`), o tailnet piscou, o iOS suspendeu o socket. Essas
+    /// valem religar; falta de internet e token recusado não valem.
+    static func ehRupturaTransitoria(_ erro: Error) -> Bool {
+        let ns = erro as NSError
+        let codigo: Int
+        if ns.domain == NSURLErrorDomain {
+            codigo = ns.code
+        } else if let erroDeURL = erro as? URLError {
+            codigo = erroDeURL.code.rawValue
+        } else {
+            return false
+        }
+        switch codigo {
+        case NSURLErrorNetworkConnectionLost, NSURLErrorTimedOut, NSURLErrorCannotConnectToHost:
+            return true
+        default:
+            return false
+        }
     }
 }
 
