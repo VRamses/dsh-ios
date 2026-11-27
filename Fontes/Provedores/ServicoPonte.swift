@@ -160,16 +160,34 @@ final class ServicoPonte: ProvedorDeConversa {
         _ = try await pedir("/v1/sessoes/\(id)/cancelar", metodo: "POST", corpo: [:])
     }
 
-    func pagina(throughSeq: Int, maxMessages: Int? = nil) async throws -> [Registro] {
+    /// Histórico guardado da sessão, do mais antigo para o mais novo.
+    ///
+    /// `throughSeq` é até onde ler: o `seq` atual da sessão traz o fim da
+    /// conversa, e um `seq` menor traz o que veio antes dele. A ponte responde
+    /// o resultado do RPC inteiro dentro de `pagina`, com os eventos em
+    /// `records`; o formato chapado continua aceito porque foi o primeiro.
+    ///
+    /// `soMensagens` pede à ponte que corte o que não é conversa e o peso que só
+    /// serve ao motor: numa sessão de agente isso é a diferença entre 1,5 MB e
+    /// 70 KB por página. Ponte antiga ignora o pedido e a tela filtra depois.
+    func pagina(throughSeq: Int, maxMessages: Int? = nil, soMensagens: Bool = true) async throws -> [Registro] {
         let id = try sessaoAtual()
         var caminho = "/v1/sessoes/\(id)/pagina?throughSeq=\(throughSeq)"
         if let maxMessages {
             caminho += "&maxMessages=\(maxMessages)"
         }
+        if soMensagens {
+            caminho += "&so=mensagens"
+        }
         let (objeto, _) = try await pedir(caminho)
         let raiz = objeto as? [String: Any] ?? [:]
-        let lista = (raiz["registros"] as? [[String: Any]]) ?? (raiz["itens"] as? [[String: Any]]) ?? []
-        return lista.compactMap(Registro.iniciar(com:))
+        let pagina = (raiz["pagina"] as? [String: Any]) ?? raiz
+        let itens = (pagina["records"] as? [[String: Any]])
+            ?? (pagina["registros"] as? [[String: Any]])
+            ?? (pagina["items"] as? [[String: Any]])
+            ?? (raiz["registros"] as? [[String: Any]])
+            ?? []
+        return itens.compactMap(Registro.iniciar(com:)).sorted { $0.seq < $1.seq }
     }
 
     func buscar(termo: String) async throws -> [ResultadoDaBusca] {
@@ -562,20 +580,32 @@ extension SessaoResumo {
 
 extension Registro {
     static func iniciar(com objeto: [String: Any]) -> Registro? {
-        guard let tipo = objeto["tipo"] as? String else { return nil }
-        let em: String?
-        if let texto = objeto["em"] as? String {
-            em = texto
-        } else if let numero = objeto["em"] as? Double {
-            em = String(Int64(numero))
-        } else {
-            em = nil
+        // O espelho do stream manda o registro chapado (`tipo`, `em`, `dados`);
+        // o histórico de `/pagina` manda o evento embrulhado em `event`, com
+        // `type`, `time` e `data`. Os dois viram o mesmo Registro aqui.
+        if let evento = objeto["event"] as? [String: Any] {
+            guard let tipo = evento["type"] as? String else { return nil }
+            return montar(
+                tipo: tipo,
+                seq: evento["seq"] as? Int ?? 0,
+                em: emTexto(evento["time"]),
+                dados: texto(de: evento["data"])
+            )
         }
-        let dados = texto(de: objeto["dados"])
+        guard let tipo = objeto["tipo"] as? String else { return nil }
+        return montar(
+            tipo: tipo,
+            seq: objeto["seq"] as? Int ?? 0,
+            em: emTexto(objeto["em"]),
+            dados: texto(de: objeto["dados"])
+        )
+    }
+
+    private static func montar(tipo: String, seq: Int, em: String?, dados: String) -> Registro {
         let conteudo = ServicoPonte.textoDoAssistente(em: dados)
         let ehDoUsuario = dados.contains("\"role\":\"user\"") || dados.contains("\"autor\":\"usuario\"")
         return Registro(
-            seq: objeto["seq"] as? Int ?? 0,
+            seq: seq,
             tipo: tipo,
             em: em,
             dados: dados,
@@ -583,6 +613,13 @@ extension Registro {
             raciocinioDoAssistente: ehDoUsuario ? nil : conteudo.raciocinio,
             textoDoUsuario: ehDoUsuario ? conteudo.texto : nil
         )
+    }
+
+    private static func emTexto(_ valor: Any?) -> String? {
+        if let texto = valor as? String { return texto }
+        if let numero = valor as? Double { return String(Int64(numero)) }
+        if let numero = valor as? Int { return String(numero) }
+        return nil
     }
 
     private static func texto(de valor: Any?) -> String {

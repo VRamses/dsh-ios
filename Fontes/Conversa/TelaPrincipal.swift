@@ -105,7 +105,10 @@ struct TelaPrincipal: View {
         ScrollViewReader { rolagem in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: Espaco.xl) {
-                    if mensagens.isEmpty && !modelo.estaRespondendo {
+                    if modelo.temMaisAntigas(conversaEfetiva) || modelo.carregandoHistorico {
+                        botaoDoHistorico
+                    }
+                    if mensagens.isEmpty && !modelo.estaRespondendo && !modelo.carregandoHistorico {
                         estadoVazio
                     }
                     ForEach(mensagens) { mensagem in
@@ -157,6 +160,39 @@ struct TelaPrincipal: View {
                     rolarAoComecoDaUltimaResposta(rolagem)
                 }
             }
+        }
+    }
+
+    /// Faixa do topo da conversa quando ela veio de uma sessão do computador:
+    /// diz que está trazendo, ou oferece o que ficou para trás da janela.
+    @ViewBuilder
+    private var botaoDoHistorico: some View {
+        if modelo.carregandoHistorico {
+            HStack(spacing: Espaco.s) {
+                ProgressView()
+                    .controlSize(.small)
+                Text("Trazendo o histórico desta sessão do computador")
+                    .font(Tipografia.legenda())
+                    .foregroundStyle(Cores.textoFraco)
+            }
+            .frame(maxWidth: .infinity, alignment: .center)
+            .padding(.vertical, Espaco.xs)
+        } else if let conversa = conversaEfetiva {
+            Button {
+                Task { await modelo.carregarMaisAntigas(de: conversa) }
+            } label: {
+                HStack(spacing: Espaco.s) {
+                    Image(systemName: "arrow.up.circle")
+                        .font(.system(size: 13, weight: .semibold))
+                    Text("Ver mensagens mais antigas")
+                        .font(Tipografia.legenda())
+                }
+                .foregroundStyle(Cores.acento)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
         }
     }
 
@@ -419,9 +455,6 @@ struct TelaPrincipal: View {
         let preferencias = Preferencias.compartilhada
         preferencias.usaPonte = true
         preferencias.marcarSessaoAberta(sessao.id, titulo: sessao.titulo)
-        if let nova = modelo.criarConversa(comTitulo: sessao.titulo) {
-            conversaAtual = nova
-        }
         modelo.definirSessao(sessao.id)
         modelo.configurar(
             modelo: modeloEscolhido,
@@ -429,6 +462,14 @@ struct TelaPrincipal: View {
             maxTokens: preferencias.maxTokens,
             usaPonte: true
         )
+        // A conversa que espelha a sessão troca agora, e o que já foi conversado
+        // no computador entra logo depois: quem escolheu a sessão quer ver o
+        // histórico dela, não uma tela em branco com o nome da sessão no topo.
+        guard let conversa = modelo.conversaParaSessao(sessao) else { return }
+        conversaAtual = conversa
+        Task { @MainActor in
+            await modelo.trazerHistorico(da: sessao, para: conversa)
+        }
     }
 
     @MainActor
@@ -462,6 +503,9 @@ struct TelaPrincipal: View {
             novaConversaPendente = true
             modelo.abrir(nil)
         }
+        // O vínculo com a sessão do computador morre junto: sem isso, escolher a
+        // mesma sessão de novo tentaria abrir uma conversa que não existe.
+        VinculoDeSessoes.compartilhado.esquecerConversa(conversa.id)
         contexto.delete(conversa)
         try? contexto.save()
     }

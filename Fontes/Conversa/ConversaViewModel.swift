@@ -26,6 +26,10 @@ final class ConversaViewModel: ObservableObject {
     /// Sessão do DSH em uso, quando a ponte é o caminho da conversa.
     @Published private(set) var sessaoDaPonte: String?
 
+    /// Verdadeiro enquanto o histórico de uma sessão do computador está sendo
+    /// trazido. A tela mostra isso em vez de fingir conversa vazia.
+    @Published private(set) var carregandoHistorico = false
+
     private var contexto: ModelContext?
     private var ponte: ServicoPonte?
     private var tarefa: Task<Void, Never>?
@@ -414,6 +418,219 @@ final class ConversaViewModel: ObservableObject {
             sessoes = []
             erroDeSessoes = error.localizedDescription
         }
+    }
+
+    // MARK: - Histórico de uma sessão do computador
+
+    /// A conversa local que espelha esta sessão: acha a que já existe ou cria
+    /// uma vazia na hora, para a tela trocar sem esperar a rede.
+    @MainActor
+    func conversaParaSessao(_ sessao: SessaoResumo) -> Conversa? {
+        guard let contexto else { return nil }
+        if let vinculo = VinculoDeSessoes.compartilhado.vinculo(de: sessao.id),
+           let existente = conversasDoContexto().first(where: { $0.id == vinculo.conversa }) {
+            conversa = existente
+            return existente
+        }
+        let nova = Conversa(titulo: tituloCurto(de: sessao.titulo), mensagens: [])
+        contexto.insert(nova)
+        try? contexto.save()
+        VinculoDeSessoes.compartilhado.salvar(
+            VinculoDeSessoes.Vinculo(conversa: nova.id, menorSeq: 0),
+            para: sessao.id
+        )
+        conversa = nova
+        return nova
+    }
+
+    /// Traz para a conversa o que já foi conversado nesta sessão no computador.
+    ///
+    /// A janela vem de trás para frente até juntar bolhas suficientes: numa
+    /// sessão de agente, a maioria dos registros é chamada e resultado de
+    /// ferramenta, e uma página só de mensagens pode render duas bolhas. O que
+    /// a conversa já tem é ignorado, porque a mesma sessão pode ser aberta de
+    /// novo e repetir bolha é pior do que não trazer nada.
+    @MainActor
+    func trazerHistorico(da sessao: SessaoResumo, para conversa: Conversa) async {
+        guard contexto != nil, let ponte else { return }
+        carregandoHistorico = true
+        defer { carregandoHistorico = false }
+        ponte.definirSessao(sessao.id)
+        guard sessao.seq > 0 else { return }
+
+        let vinculo = VinculoDeSessoes.compartilhado.vinculo(de: sessao.id)
+        do {
+            let resultado = try await importar(
+                da: sessao.id,
+                para: conversa,
+                comecandoEm: sessao.seq,
+                ateJuntar: 20,
+                noMaximo: 4
+            )
+            let menor = menorSeq(entre: vinculo?.menorSeq ?? 0, e: resultado.menorSeq)
+            VinculoDeSessoes.compartilhado.salvar(
+                VinculoDeSessoes.Vinculo(conversa: conversa.id, menorSeq: menor),
+                para: sessao.id
+            )
+            conversa.atualizadaEm = Date()
+            self.conversa = conversa
+        } catch {
+            erro = "Não consegui trazer o histórico desta sessão: \(error.localizedDescription)"
+        }
+    }
+
+    /// Pede o bloco anterior do histórico desta conversa.
+    @MainActor
+    func carregarMaisAntigas(de conversa: Conversa) async {
+        guard contexto != nil, let ponte,
+              let achado = VinculoDeSessoes.compartilhado.sessao(deConversa: conversa.id),
+              achado.vinculo.menorSeq > 1
+        else { return }
+        carregandoHistorico = true
+        defer { carregandoHistorico = false }
+        ponte.definirSessao(achado.sessao)
+        do {
+            let resultado = try await importar(
+                da: achado.sessao,
+                para: conversa,
+                comecandoEm: achado.vinculo.menorSeq - 1,
+                ateJuntar: 10,
+                noMaximo: 4
+            )
+            VinculoDeSessoes.compartilhado.salvar(
+                VinculoDeSessoes.Vinculo(
+                    conversa: conversa.id,
+                    menorSeq: menorSeq(entre: achado.vinculo.menorSeq, e: resultado.menorSeq)
+                ),
+                para: achado.sessao
+            )
+            self.conversa = conversa
+        } catch {
+            erro = "Não consegui trazer as mensagens mais antigas: \(error.localizedDescription)"
+        }
+    }
+
+    /// Diz se esta conversa ainda tem histórico para trás.
+    @MainActor
+    func temMaisAntigas(_ conversa: Conversa?) -> Bool {
+        guard let conversa,
+              let achado = VinculoDeSessoes.compartilhado.sessao(deConversa: conversa.id)
+        else { return false }
+        return achado.vinculo.menorSeq > 1
+    }
+
+    /// Anda para trás no histórico da sessão, gravando o que ainda não está na
+    /// conversa, até juntar `alvo` bolhas ou `paginas` páginas.
+    ///
+    /// Devolve o menor `seq` que entrou de fato, para o vínculo saber da próxima
+    /// vez de onde continuar. Zero quer dizer que nada entrou.
+    @MainActor
+    private func importar(
+        da sessao: String,
+        para conversa: Conversa,
+        comecandoEm throughSeq: Int,
+        ateJuntar alvo: Int,
+        noMaximo paginas: Int
+    ) async throws -> (inseridas: Int, menorSeq: Int) {
+        guard let contexto, let ponte else { return (0, 0) }
+        var jaTem = assinaturas(da: conversa)
+        var entrada = throughSeq
+        var menor = 0
+        var inseridas = 0
+        var pagina = 0
+        while pagina < paginas {
+            pagina += 1
+            let registros = try await ponte.pagina(throughSeq: entrada, maxMessages: 60)
+            for registro in registros {
+                guard let mensagem = mensagem(de: registro) else { continue }
+                let assinatura = Self.assinatura(papel: mensagem.papel, texto: mensagem.conteudo)
+                if jaTem.contains(assinatura) { continue }
+                jaTem.insert(assinatura)
+                mensagem.conversa = conversa
+                contexto.insert(mensagem)
+                menor = menor == 0 ? registro.seq : min(menor, registro.seq)
+                inseridas += 1
+            }
+            try? contexto.save()
+            guard inseridas < alvo, let maisAntigo = registros.first?.seq, maisAntigo > 1 else { break }
+            entrada = maisAntigo - 1
+        }
+        return (inseridas, menor)
+    }
+
+    /// O piso do histórico é o mais antigo já trazido, e nunca volta atrás por
+    /// causa de uma página que não trouxe nada.
+    private func menorSeq(entre atual: Int, e novo: Int) -> Int {
+        if novo == 0 { return atual }
+        if atual == 0 { return novo }
+        return min(atual, novo)
+    }
+
+    /// Vira bolha só o que é mensagem: chamada e resultado de ferramenta também
+    /// estão no histórico, e despejar isso na tela não é conversa.
+    private func mensagem(de registro: Registro) -> Mensagem? {
+        guard registro.tipo.lowercased().contains("message") else { return nil }
+        let ehDoUsuario = registro.textoDoUsuario != nil
+        let bruto = registro.textoDoUsuario ?? registro.textoDoAssistente ?? ""
+        let texto = Self.limpar(bruto)
+        guard !texto.isEmpty else { return nil }
+        // O que o DSH injeta como mensagem de usuário no meio do turno aparece
+        // no histórico com cara de pergunta. Não é conversa: fica de fora.
+        if ehDoUsuario, Self.ehInjecaoDeSistema(texto) { return nil }
+        let raciocinio = ehDoUsuario ? nil : registro.raciocinioDoAssistente
+        return Mensagem(
+            papel: ehDoUsuario ? .usuario : .assistente,
+            conteudo: texto,
+            raciocinio: (raciocinio?.isEmpty ?? true) ? nil : raciocinio,
+            criadaEm: Self.data(de: registro.em)
+        )
+    }
+
+    /// Tira o que a ponte põe na frente do texto para se identificar na sessão,
+    /// senão a mensagem que a pessoa escreveu no iPhone volta com etiqueta.
+    private static func limpar(_ texto: String) -> String {
+        var limpo = texto.trimmingCharacters(in: .whitespacesAndNewlines)
+        if limpo.hasPrefix("[ponte "), let fim = limpo.firstIndex(of: "]") {
+            limpo = String(limpo[limpo.index(after: fim)...])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return limpo
+    }
+
+    private static let marcadoresDeSistema = [
+        "<system-reminder",
+        "<environment_context",
+        "<user_instructions",
+        "<task_state",
+        "Current runtime context",
+        "Time sampled while preparing turn",
+        "This is an automatically generated checkpoint",
+        "The available skill catalog changed"
+    ]
+
+    private static func ehInjecaoDeSistema(_ texto: String) -> Bool {
+        let inicio = String(texto.prefix(160))
+        return marcadoresDeSistema.contains { inicio.hasPrefix($0) }
+    }
+
+    private func assinaturas(da conversa: Conversa) -> Set<String> {
+        Set(conversa.mensagens.map { Self.assinatura(papel: $0.papel, texto: $0.conteudo) })
+    }
+
+    private static func assinatura(papel: Papel, texto: String) -> String {
+        "\(papel.rawValue)|\(texto.prefix(120))|\(texto.count)"
+    }
+
+    private static func data(de em: String?) -> Date {
+        guard let em, let milissegundos = Double(em), milissegundos > 0 else { return Date() }
+        let segundos = milissegundos > 100_000_000_000 ? milissegundos / 1000 : milissegundos
+        return Date(timeIntervalSince1970: segundos)
+    }
+
+    @MainActor
+    private func conversasDoContexto() -> [Conversa] {
+        guard let contexto else { return [] }
+        return (try? contexto.fetch(FetchDescriptor<Conversa>())) ?? []
     }
 
     // MARK: - SwiftData

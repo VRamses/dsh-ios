@@ -13,7 +13,11 @@ struct PensamentoRetratil: View {
     var estaAoVivo: Bool
 
     @Environment(\.accessibilityReduceMotion) private var reduzirMovimento
-    @State private var aberto = true
+    // Nasce fechado de propósito. Aberto só enquanto a máquina pensa, que é quando
+    // `onAppear`/`onChange` forçam `aberto = true`. Antes nascia aberto e o cartão
+    // de uma resposta já pronta (histórico ou texto que chegou pelo socorro, sem
+    // passar pelo estado vivo) ficava aberto ocupando a tela com o rascunho.
+    @State private var aberto = false
     @State private var inicio = Date()
     @State private var fim: Date?
     @State private var medindo = false
