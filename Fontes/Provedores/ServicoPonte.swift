@@ -296,7 +296,11 @@ final class ServicoPonte: ProvedorDeConversa {
                     try await enviar(texto: texto, modo: .queue)
                     var textoEmitido = ""
                     var raciocinioEmitido = ""
+                    var quadros = 0
+                    var ultimoEvento = "nenhum"
                     for try await evento in fluxoDeEventos() {
+                        quadros += 1
+                        ultimoEvento = evento.nome
                         if let erro = evento.erro {
                             throw ErroDaConversa.rede(erro)
                         }
@@ -313,6 +317,20 @@ final class ServicoPonte: ProvedorDeConversa {
                             }
                         }
                     }
+                    // O stream pode fechar sem nenhum texto (sessao ociosa, evento
+                    // perdido, proxy cortando). Antes de desistir, pergunta a sessao
+                    // o que ela guardou: a resposta pode estar pronta do outro lado.
+                    if textoEmitido.isEmpty && raciocinioEmitido.isEmpty,
+                       let socorro = await ultimaRespostaDaSessao() {
+                        if !socorro.texto.isEmpty {
+                            continuacao.yield(.texto(socorro.texto))
+                            textoEmitido = socorro.texto
+                        }
+                        if raciocinioEmitido.isEmpty && !socorro.raciocinio.isEmpty {
+                            continuacao.yield(.raciocinio(socorro.raciocinio))
+                            raciocinioEmitido = socorro.raciocinio
+                        }
+                    }
                     // A sessão pode fechar os eventos sem mandar texto nenhum; sem
                     // isso, a tela ficaria com a pergunta e mais nada. A causa mais
                     // comum é a sessão já estar respondendo no computador: o turno
@@ -320,7 +338,8 @@ final class ServicoPonte: ProvedorDeConversa {
                     // para cá.
                     if textoEmitido.isEmpty && raciocinioEmitido.isEmpty {
                         throw ErroDaConversa.rede(
-                            "a sessão do DSH fechou os eventos sem devolver texto."
+                            "a sessão do DSH fechou os eventos sem devolver texto"
+                                + " (\(quadros) quadros, último: \(ultimoEvento))."
                                 + " Se ela já estava respondendo no computador, crie uma"
                                 + " sessão nova: toque no nome do modelo e depois em Nova sessão."
                         )
@@ -347,6 +366,24 @@ final class ServicoPonte: ProvedorDeConversa {
         tarefaDeEventos?.cancel()
         tarefaDaResposta = nil
         tarefaDeEventos = nil
+    }
+
+    /// A via de socorro quando o stream fecha sem texto: pergunta à ponte o que a
+    /// sessão guardou de fato. O histórico é mais confiável que remontar quadros,
+    /// porque o turno pode ter rodado e terminado fora do stream.
+    private func ultimaRespostaDaSessao() async -> (texto: String, raciocinio: String)? {
+        guard let id = try? sessaoAtual(), let endereco = url("/v1/sessoes/\(id)/ultima-resposta") else { return nil }
+        guard !token.isEmpty else { return nil }
+        var requisicao = URLRequest(url: endereco)
+        requisicao.timeoutInterval = 20
+        requisicao.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        guard let (dados, resposta) = try? await sessao.data(for: requisicao) else { return nil }
+        guard (resposta as? HTTPURLResponse)?.statusCode == 200 else { return nil }
+        guard let objeto = try? JSONSerialization.jsonObject(with: dados) as? [String: Any] else { return nil }
+        let texto = objeto["texto"] as? String ?? ""
+        let raciocinio = objeto["raciocinio"] as? String ?? ""
+        guard !texto.isEmpty || !raciocinio.isEmpty else { return nil }
+        return (texto, raciocinio)
     }
 
     private func delta(_ texto: String, emitido: String) -> String? {
