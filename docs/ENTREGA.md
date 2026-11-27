@@ -991,6 +991,57 @@ O que esta rodada **não** prova: nada foi instalado no aparelho ainda. A rota d
 acompanhamento reaberto foram exercitados daqui, com o mesmo código que o build 10 carrega, não pelo
 toque na tela do iPhone.
 
+### A décima quarta instalação, no SUPERCOLLIDER, em 27/11/2026
+
+O build 10 foi instalado e a resposta apareceu na tela: a mensagem "[ponte SUPERCOLLIDER] Teste" saiu
+às 00:09:03 e a resposta chegou às 00:10:09. O log da ponte, porém, mostra que o texto que encheu a
+tela veio do socorro pelo histórico, não dos quadros do stream:
+
+```
+2026-11-27T03:09:41.507Z eventos -> session-94f30e75...: 339 quadros, 850 chars de texto, 2517 de raciocinio, fechou por fim do turno (completed)
+2026-11-27T03:09:41.515Z req GET /v1/sessoes/session-94f30e75.../ultima-resposta de 127.0.0.1
+2026-11-27T03:09:41.819Z ultima-resposta -> session-94f30e75...: seq 10011, 850 chars de texto de 127.0.0.1
+```
+
+Ou seja: a ponte escreveu 850 caracteres em 339 quadros e o app só pediu o histórico 8 ms depois do
+fecho, o que só acontece quando nenhum texto foi extraído dos quadros. Para separar transporte de
+leitura, o corpo de um quadro ao vivo foi gravado inteiro, no meio do turno:
+
+```
+{"tipo":"assistant","em":1795749169184,"dados":{"content":[{"type":"text","text":"gama."}]},
+ "registros":[{"tipo":"assistant","em":"1795749169184","dados":{"content":[{"type":"text","text":"gama."}]}}]}
+```
+
+e, num turno de 5,9 s com 113 quadros de mensagem, todos os 113 vieram com `registros` preenchido,
+desde o raciocínio do começo até os 1.109 caracteres do fim. O formato que o app lê está certo, então
+o defeito está na leitura do lado do aparelho, e é isso que este build passa a medir de lá.
+
+| o que mudou | onde | por quê |
+|---|---|---|
+| conta o que o app viu | `ponte/servidor.mjs`, rota nova `POST /v1/diagnostico` | o log da ponte passa a ter a voz do aparelho: quantos quadros chegaram, quantos tinham `registros`, qual foi o último evento e os 400 primeiros caracteres dele |
+| app relata antes de desistir | `Fontes/Provedores/ServicoPonte.swift`, `contarDiagnostico` | quando o stream fecha sem texto e houve quadros, o app manda esse resumo para a ponte antes de pedir o histórico |
+| texto é o que importa | mesmo arquivo, `responder` | o socorro pelo histórico deixou de exigir raciocínio vazio: raciocínio não é resposta, e antes um stream só com raciocínio ficava sem texto nenhum na tela |
+| versão | `project.yml` | `CURRENT_PROJECT_VERSION` de 10 para 11 |
+
+| o que | como foi medido | resultado |
+|---|---|---|
+| corpo do quadro ao vivo | `node _tmp\corpo-quadros.mjs`, gravando o primeiro `mensagem` inteiro | 201 caracteres, `registros` com `tipo` `assistant` e `content` de texto |
+| quadros de um turno inteiro | `node _tmp\amostra-quadros.mjs`, turno de 5,9 s | 114 quadros, 113 `mensagem`, 113 com `registros`, do raciocínio de 3 caracteres ao texto de 1.109 |
+| rota nova no ar | `POST /v1/diagnostico` daqui, com o token da ponte | `200 {"ok":true}` e a linha `diagnostico do app de 127.0.0.1: {"teste":"ponte viva","quadros":3}` no log |
+| rodada do CI | `gh run view 45933124406`, commit `e7b817f` | `success` nos dois jobs, "IPA sem assinatura" em 2m30s e "Simulador e capturas" em 7m50s |
+| pacote entregue | artefato `ipa` da rodada, conferido com `zipfile` e `plistlib` | `DSH-livre.ipa` com 934.524 bytes e sha256 `D7E4B668B5A7EC7A7CCA51312B2A54140680BA233F247CCB2B6166C04C25592F` |
+| conteúdo do pacote | mesmo conferidor | 15 entradas, nenhuma com `PlugIns`, `dev.ramses.dsh`, versão `1.0.0` build `11`, mínimo 18.0 |
+| binário | `file_size` de `Payload/DSH.app/DSH` no `zipfile` | 3.801.584 bytes, 1.496 a mais que os 3.800.088 do build 10 |
+| onde o arquivo está | `C:\Users\victo\iCloudDrive\DSH-livre-20261127-build11.ipa` e `_tmp\share\DSH-livre-20261127-build11.ipa` | mesmo sha256 nos dois |
+
+Depois de instalar, Ajustes tem de mostrar "1.0.0 (11)" no rodapé. O que se espera: a resposta aparece
+como antes, e, se o texto continuar chegando só pelo socorro, o log da ponte passa a dizer quantos
+quadros o aparelho viu e o que havia neles, que é o dado que falta para achar a leitura errada.
+
+O que esta rodada **não** prova: a leitura dos quadros no aparelho continua sem explicação. O formato
+está certo e o corpo foi conferido aqui, mas o app só é observável pelo que ele conta para a ponte, e
+essa contagem estreia neste build.
+
 ## 11. O que fica aberto
 
 O que está abaixo é conhecido e não escondido. Nenhum item impede usar o app no dia a dia, mas
@@ -1010,7 +1061,8 @@ cada um é uma promessa que o app ainda não cumpre.
 | texto do pedido de câmera | resolvido no build 6: `NSCameraUsageDescription` cita a foto anexada e o QR de pareamento, e o pacote traz a frase nova em `Info.plist` | o alerta do sistema agora descreve as duas ações que usam a câmera |
 | resposta vazia do motor DeepSeek direto | tratado no build 7: o stream passou a ser lido pela delegação do `URLSession`, que descomprime, e o erro diz quantas linhas chegaram junto do `Content-Encoding` | falta confirmar no aparelho que a conversa responde; se não responder, a faixa do erro passa a nomear a causa |
 | pergunta caindo em sessão ocupada | tratado no build 9: a ponte só entrega o turno do próprio pedido (fronteira pelo `requestId`) e o app abre sessão nova quando a escolhida está `rodando` no computador | falta confirmar no aparelho: mandar duas mensagens seguidas, com uma sessão do PC respondendo, e ver a resposta certa na tela do iPhone |
-| texto que some com o stream aberto | tratado no build 10: a ponte reabre o acompanhamento em vez de fechar com zero quadros, manda `event: erro` com o motivo quando não houver texto, e o app busca a última resposta guardada na sessão antes de mostrar erro | falta confirmar no aparelho com o build 10: a resposta tem de aparecer na tela mesmo quando o stream do DSH terminar sozinho no meio do turno |
+| texto que some com o stream aberto | tratado no build 10: a ponte reabre o acompanhamento em vez de fechar com zero quadros, manda `event: erro` com o motivo quando não houver texto, e o app busca a última resposta guardada na sessão antes de mostrar erro | o build 10 foi instalado em 27/11/2026 e a resposta apareceu, mas o log mostrou que o texto veio do socorro pelo histórico, não dos quadros: a tela enche de uma vez, sem streaming |
+| texto dos quadros ao vivo no aparelho | o build 11 passou a medir de lá: `POST /v1/diagnostico` grava no log da ponte quantos quadros o app viu, quantos tinham `registros`, o último evento e os 400 primeiros caracteres dele; o socorro pelo histórico também deixou de exigir raciocínio vazio | falta instalar o build 11, mandar uma mensagem e ler a linha `diagnostico do app` no log da ponte; o corpo do quadro foi conferido aqui e está no formato que o app lê, então a causa está na leitura do lado do aparelho |
 | troca entre dois computadores | a lista, o token por instância e o espelho para as preferências existem e a seção Computadores abre no simulador com um computador salvo | falta ter dois computadores com ponte de pé e alternar entre eles para ver a sessão de cada um carregar no aparelho; o simulador do CI não tem tailnet |
 | foto pela ponte | o motor DeepSeek direto recebe a foto de verdade, em base64; a ponte recebe só o texto reconhecido, e o pedido diz isso ao modelo | a ponte é transporte de texto e não tem rota de imagem; fazer a foto atravessar exigiria uma rota nova nela e um servidor que aceitasse o JPEG |
 | importar a chave de busca web | o cofre do PC não tem `TAVILY_API_KEY` nem `BRAVE_API_KEY` | criar uma chave gratuita na Tavily, gravar no cofre do PC e usar o botão de importar, ou colar direto em Ajustes |
