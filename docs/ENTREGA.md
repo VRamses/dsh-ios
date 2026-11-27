@@ -869,6 +869,50 @@ produziu as três mudanças de cima: `end` de etapa não fecha mais nada, `turn/
 pedido, e o piso do turno não depende mais da ordem em que os quadros chegam. Como isso mora só na
 ponte, vale para o build 8 e para o build 9 sem reinstalar nada.
 
+#### O teste do iPhone às 23:19, que fechou o caso
+
+A mensagem seguinte do aparelho caiu no caso oposto: a tela ficou em "escrevendo" e nenhum texto
+apareceu, sem erro e sem fechamento. O log parou no `GET .../eventos` e nunca registrou a linha de
+fechamento:
+
+```
+2026-11-27T02:19:19.325Z req GET /v1/sessoes/session-94f30e75.../eventos de 127.0.0.1
+```
+
+A leitura crua do retrato da sessão (`?cru=1`) mostrou duas coisas que a ponte não estava usando. O
+`snapshot` traz `records` com o pedido do iPhone (o `agent/inbox/spliced` com o `rpcId`), o
+`turn/start` do turno dele, o `assistant/message` com `data.turn` e o `turn/end`. E
+`sessionStats.turns` já contava o turno do próprio pedido quando ele acabara de começar, então o piso
+calculado como `turns + 1` caía um acima do turno certo: nenhum `turn/start` batia no piso, o stream
+nunca travava um turno e ficava mudo até o vigia.
+
+As três correções:
+
+- o piso sai dos turnos dos registros do `snapshot` que vêm antes da fronteira, nunca de
+  `sessionStats.turns`;
+- depois da fronteira, o `snapshot` é lido como se fossem quadros ao vivo: o `assistant/message` do
+  turno do pedido entrega o texto e o `turn/end` dele fecha o stream. É o que salva o stream aberto
+  segundos depois do POST, com a resposta já pronta;
+- se o turno do pedido não for identificado em 90 s, a ponte avisa na tela em vez de deixar
+  "escrevendo" para sempre.
+
+Medições depois do reinício, com o mesmo código:
+
+| caso | resultado |
+|---|---|
+| sessão com história, stream aberto junto do POST | "dois" em 1.275 ms |
+| mesma sessão, stream aberto 400 ms depois | "dois" em 1.213 ms |
+| stream aberto 3 s depois, resposta já pronta | "dois." em 15 ms, lido do retrato |
+| stream aberto 8 s depois, resposta já pronta | "dois." em 13 ms, lido do retrato |
+| sessão nova | "alfa" em 3.013 ms e em 5.119 ms |
+| sessão com história | "beta" em 1.355 ms |
+| sessão ocupada, duas rodadas | só "gama", em 18.475 ms e em 24.718 ms |
+| cliente que abandona o stream | `/v1/saude` responde 200 e a ponte segue viva |
+| tailnet | "alfa." em 3.864 ms |
+| erros não tratados no log desde o reinício | nenhum |
+
+Também vale para o build 8, que está no aparelho: nada disso mudou o app.
+
 #### A conta do que mudou
 
 | o que | como foi medido | resultado |
