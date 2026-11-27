@@ -932,6 +932,65 @@ dois jobs, do conteúdo do pacote e dos quatro caminhos da ponte medidos daqui c
 o build 9 carrega. A regra da sessão ocupada foi exercitada pela ponte e pela compilação, não pelo
 toque na tela do iPhone.
 
+### A décima terceira instalação, no SUPERCOLLIDER, em 27/11/2026
+
+O build 9 chegou no aparelho e repetiu a mesma frase às 23:44 de 26/11/2026: "Não deu para responder.
+Falha de rede: a sessão do DSH fechou os eventos sem devolver texto". O log da ponte mostrou que eram
+dois defeitos diferentes, um atrás do outro.
+
+O primeiro stream da noite entregou a resposta:
+
+```
+2026-11-27T02:44:24.433Z eventos -> session-94f30e75...: 234 quadros, 540 chars de texto, 1527 de raciocinio, fechou por fim do turno (completed)
+```
+
+e a tela não mostrou nada. O segundo fechou sozinho em 1,04 s, sem nenhum quadro:
+
+```
+2026-11-27T02:44:48.605Z req GET /v1/sessoes/session-94f30e75.../eventos de 127.0.0.1
+2026-11-27T02:44:49.649Z eventos -> session-94f30e75...: 0 quadros, 0 chars de texto, 0 de raciocinio, fechou por fim do stream
+```
+
+Transporte e formato já estavam descartados por medição, feita daqui com os mesmos cabeçalhos do
+aparelho: pelo proxy do tailnet na porta 8443, `fetch` comum recebeu 3 quadros com o texto `um` em
+2.430 ms; por HTTP/2 de verdade (`node:http2`, `alpn: h2`), 2 quadros com `delta.` em 3.399 ms. O
+pacote instalado também tinha o código de leitura do espelho `registros`, conferido no commit
+`0634b19` de `Fontes/Provedores/ServicoPonte.swift`, anterior ao build das 22:56.
+
+A causa do segundo caso é da ponte: o `session/follow` do DSH termina na hora quando não há turno
+vivo, e a ponte tratava esse fim como fim de tudo, fechando o stream do app com zero quadros. A
+correção é reabrir o acompanhamento em vez de fechar, e só desistir com motivo escrito.
+
+| o que mudou | onde | por quê |
+|---|---|---|
+| reabre o acompanhamento | `ponte/servidor.mjs`, rota `/eventos` | o `session/follow` é reaberto a cada 600 ms, até 150 s, enquanto não houver texto e o turno do pedido não tiver terminado; era o fecho de zero quadros que virava erro na tela |
+| não fecha vazio | mesma rota | o `finally` que chamava `encerrar('fim do stream')` sem quadro nenhum saiu; o fecho agora diz quantas aberturas houve e se o pedido chegou |
+| erro com causa | mesma rota | quando não houver texto, a ponte manda `event: erro` dizendo o que houve, em vez de fechar calada |
+| socorro pelo histórico | nova rota `GET /v1/sessoes/<id>/ultima-resposta[?depoisDeSeq=N]` | devolve o último `assistant/message` guardado na sessão, com texto e raciocínio separados, ignorando resposta anterior ao pedido |
+| app pergunta antes de desistir | `Fontes/Provedores/ServicoPonte.swift`, `responder` e `ultimaRespostaDaSessao` | se o stream fechar sem texto nem raciocínio, o app busca a última resposta na rota nova e mostra; só erra se as duas vias vierem vazias |
+| erro que serve de pista | mesmo arquivo | a mensagem passou a dizer quantos quadros chegaram e qual foi o último evento |
+| versão | `project.yml` | `CURRENT_PROJECT_VERSION` de 9 para 10 |
+
+| o que | como foi medido | resultado |
+|---|---|---|
+| rota nova em sessão com resposta | `GET .../ultima-resposta` numa sessão respondida | `seq` 109, texto completo da resposta com a tabela de projetos, 2.290 caracteres de raciocínio |
+| rota nova sem pedido novo | mesma rota com `depoisDeSeq` acima do último registro | texto vazio, sem erro |
+| stream normal, código novo | `node _tmp\teste-proxy.mjs` pelo proxy 8443 | 3 quadros, `um` em 2.697 ms, fechou por fim do turno |
+| stream em sessão ociosa | `node _tmp\teste-ociosa.mjs` numa sessão já respondida | 2 quadros com o texto do turno anterior, fechou em 35 ms com motivo escrito |
+| rodada do CI | `gh run view 45931189613`, commit `1822cbe` | `success` nos dois jobs, "IPA sem assinatura" em 2m35s e "Simulador e capturas" em 7m29s |
+| pacote entregue | artefato `ipa` da rodada, conferido com `zipfile` e `plistlib` | `DSH-livre.ipa` com 933.546 bytes e sha256 `A8F29F6C1D1BA8A935F1C4A7747B606540879BA68A183063D994A4C20258D042` |
+| conteúdo do pacote | mesmo conferidor | 15 entradas, nenhuma com `PlugIns`, `dev.ramses.dsh`, versão `1.0.0` build `10`, mínimo 18.0 |
+| binário | `file_size` de `Payload/DSH.app/DSH` no `zipfile` | 3.800.088 bytes, 1.592 a mais que os 3.798.496 do build 9 |
+| onde o arquivo está | `C:\Users\victo\iCloudDrive\DSH-livre-20261127-build10.ipa` e `_tmp\share\DSH-livre-20261127-build10.ipa` | mesmo sha256 nos dois |
+
+Depois de instalar, Ajustes tem de mostrar "1.0.0 (10)" no rodapé. O que se espera da tela: a resposta
+aparece mesmo quando o stream fecha sem texto, porque o app busca o texto guardado na sessão; e, quando
+nem isso existir, o aviso diz quantos quadros chegaram em vez da frase genérica.
+
+O que esta rodada **não** prova: nada foi instalado no aparelho ainda. A rota de socorro e o
+acompanhamento reaberto foram exercitados daqui, com o mesmo código que o build 10 carrega, não pelo
+toque na tela do iPhone.
+
 ## 11. O que fica aberto
 
 O que está abaixo é conhecido e não escondido. Nenhum item impede usar o app no dia a dia, mas
@@ -951,6 +1010,7 @@ cada um é uma promessa que o app ainda não cumpre.
 | texto do pedido de câmera | resolvido no build 6: `NSCameraUsageDescription` cita a foto anexada e o QR de pareamento, e o pacote traz a frase nova em `Info.plist` | o alerta do sistema agora descreve as duas ações que usam a câmera |
 | resposta vazia do motor DeepSeek direto | tratado no build 7: o stream passou a ser lido pela delegação do `URLSession`, que descomprime, e o erro diz quantas linhas chegaram junto do `Content-Encoding` | falta confirmar no aparelho que a conversa responde; se não responder, a faixa do erro passa a nomear a causa |
 | pergunta caindo em sessão ocupada | tratado no build 9: a ponte só entrega o turno do próprio pedido (fronteira pelo `requestId`) e o app abre sessão nova quando a escolhida está `rodando` no computador | falta confirmar no aparelho: mandar duas mensagens seguidas, com uma sessão do PC respondendo, e ver a resposta certa na tela do iPhone |
+| texto que some com o stream aberto | tratado no build 10: a ponte reabre o acompanhamento em vez de fechar com zero quadros, manda `event: erro` com o motivo quando não houver texto, e o app busca a última resposta guardada na sessão antes de mostrar erro | falta confirmar no aparelho com o build 10: a resposta tem de aparecer na tela mesmo quando o stream do DSH terminar sozinho no meio do turno |
 | troca entre dois computadores | a lista, o token por instância e o espelho para as preferências existem e a seção Computadores abre no simulador com um computador salvo | falta ter dois computadores com ponte de pé e alternar entre eles para ver a sessão de cada um carregar no aparelho; o simulador do CI não tem tailnet |
 | foto pela ponte | o motor DeepSeek direto recebe a foto de verdade, em base64; a ponte recebe só o texto reconhecido, e o pedido diz isso ao modelo | a ponte é transporte de texto e não tem rota de imagem; fazer a foto atravessar exigiria uma rota nova nela e um servidor que aceitasse o JPEG |
 | importar a chave de busca web | o cofre do PC não tem `TAVILY_API_KEY` nem `BRAVE_API_KEY` | criar uma chave gratuita na Tavily, gravar no cofre do PC e usar o botão de importar, ou colar direto em Ajustes |
