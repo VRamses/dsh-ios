@@ -297,10 +297,14 @@ final class ServicoPonte: ProvedorDeConversa {
                     var textoEmitido = ""
                     var raciocinioEmitido = ""
                     var quadros = 0
+                    var comRegistros = 0
                     var ultimoEvento = "nenhum"
+                    var amostra = ""
                     for try await evento in fluxoDeEventos() {
                         quadros += 1
                         ultimoEvento = evento.nome
+                        if !evento.registros.isEmpty { comRegistros += 1 }
+                        amostra = String(evento.json.prefix(400))
                         if let erro = evento.erro {
                             throw ErroDaConversa.rede(erro)
                         }
@@ -320,15 +324,25 @@ final class ServicoPonte: ProvedorDeConversa {
                     // O stream pode fechar sem nenhum texto (sessao ociosa, evento
                     // perdido, proxy cortando). Antes de desistir, pergunta a sessao
                     // o que ela guardou: a resposta pode estar pronta do outro lado.
-                    if textoEmitido.isEmpty && raciocinioEmitido.isEmpty,
-                       let socorro = await ultimaRespostaDaSessao() {
-                        if !socorro.texto.isEmpty {
-                            continuacao.yield(.texto(socorro.texto))
-                            textoEmitido = socorro.texto
+                    // Raciocínio não conta como resposta, então basta o texto faltar.
+                    if textoEmitido.isEmpty {
+                        if quadros > 0 {
+                            await contarDiagnostico(
+                                quadros: quadros,
+                                comRegistros: comRegistros,
+                                ultimoEvento: ultimoEvento,
+                                amostra: amostra
+                            )
                         }
-                        if raciocinioEmitido.isEmpty && !socorro.raciocinio.isEmpty {
-                            continuacao.yield(.raciocinio(socorro.raciocinio))
-                            raciocinioEmitido = socorro.raciocinio
+                        if let socorro = await ultimaRespostaDaSessao() {
+                            if !socorro.texto.isEmpty {
+                                continuacao.yield(.texto(socorro.texto))
+                                textoEmitido = socorro.texto
+                            }
+                            if raciocinioEmitido.isEmpty && !socorro.raciocinio.isEmpty {
+                                continuacao.yield(.raciocinio(socorro.raciocinio))
+                                raciocinioEmitido = socorro.raciocinio
+                            }
                         }
                     }
                     // A sessão pode fechar os eventos sem mandar texto nenhum; sem
@@ -384,6 +398,34 @@ final class ServicoPonte: ProvedorDeConversa {
         let raciocinio = objeto["raciocinio"] as? String ?? ""
         guard !texto.isEmpty || !raciocinio.isEmpty else { return nil }
         return (texto, raciocinio)
+    }
+
+    /// Conta para a ponte o que o app viu quando o stream fechou sem texto. Não
+    /// muda nada na tela: serve para o log dizer de que lado está o defeito, se
+    /// nos quadros que chegaram ou na leitura deles.
+    private func contarDiagnostico(
+        quadros: Int,
+        comRegistros: Int,
+        ultimoEvento: String,
+        amostra: String
+    ) async {
+        guard let id = try? sessaoAtual(), let endereco = url("/v1/diagnostico"), !token.isEmpty else { return }
+        var requisicao = URLRequest(url: endereco)
+        requisicao.httpMethod = "POST"
+        requisicao.timeoutInterval = 10
+        requisicao.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        requisicao.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        let corpo: [String: Any] = [
+            "sessao": id,
+            "quadros": quadros,
+            "comRegistros": comRegistros,
+            "ultimoEvento": ultimoEvento,
+            "amostra": amostra,
+            "versao": (Bundle.main.infoDictionary?["CFBundleVersion"] as? String) ?? "?",
+        ]
+        guard let dados = try? JSONSerialization.data(withJSONObject: corpo) else { return }
+        requisicao.httpBody = dados
+        _ = try? await sessao.data(for: requisicao)
     }
 
     private func delta(_ texto: String, emitido: String) -> String? {
